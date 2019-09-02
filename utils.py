@@ -106,7 +106,8 @@ def SSE(X,C):
     return SSE
 
 def loglikelihood_GMM(P,X,robust = True):
-    """Computes the loglikelihood of GMM model P on data X.
+    """Computes the loglikelihood of GMM model P on data X, defined as follows:
+        loglikelihood = (1/n) * sum_{i=1..n} log(sum_{k=1..K} (w_k)*N(x_i ; mu_k, Sigma_k) )
     
     Arguments:
         - P: tuple of three numpy arrays describing the GMM model of form (w,mus,Sigmas)
@@ -118,7 +119,7 @@ def loglikelihood_GMM(P,X,robust = True):
                   (note: execution will be slower)
         
     Returns:
-        - SSE: real, the SSE score defined above
+        - loglikelihood: real, the loglikelihood value defined above
     """
     
     # Unpack
