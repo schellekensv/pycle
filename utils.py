@@ -105,15 +105,44 @@ def SSE(X,C):
         SSE += np.min(np.linalg.norm(C-X[i],axis=1))**2
     return SSE
 
-def loglikelihood_GMM(P,X):
-    """Computes the loglikelihood of GMM model P on data X."""
+def loglikelihood_GMM(P,X,robust = True):
+    """Computes the loglikelihood of GMM model P on data X.
+    
+    Arguments:
+        - P: tuple of three numpy arrays describing the GMM model of form (w,mus,Sigmas)
+            - w      : (K,)-numpy array, the weights of the K Gaussians (should sum to 1)
+            - mus    : (K,d)-numpy array containing the means of the Gaussians
+            - Sigmas : (K,d,d)-numpy array containing the covariance matrices of the Gaussians
+        - X: (n,d)-numpy array, the dataset of n examples in dimension d
+        - robust: bool (default = True), if True, avoids -inf output due to very small probabilities
+                  (note: execution will be slower)
+        
+    Returns:
+        - SSE: real, the SSE score defined above
+    """
     
     # Unpack
     (w,mu,Sig) = P
     K = w.size
     
+    logp = np.zeros(X.shape[0])
     p = np.zeros(X.shape[0])
+    
     for k in range(K):
         p += w[k]*multivariate_normal.pdf(X, mean=mu[k], cov=Sig[k], allow_singular=True)
+    logp = np.log(p)
+    
+    if robust:
+        b = np.zeros(K)
+        a = np.zeros(K)
+        for k in range(K):
+            a[k] = w[k]*((2*np.pi)**(-d/2))*(np.linalg.det(Sig[k])**(-1/2))
+        for i in np.where(p==0)[0]: # Replace the inf values due to rounding p to 0
+            for k in range(K):
+                b[k] = -(X[i]-mus[k])@np.linalg.inv(Sig[k])@(X[i]-mus[k])/2
+            lc = b.max()
+            ebc = np.exp(b-lc)
+            logp[i] = np.log(ebc@a) + lc
         
-    return np.mean(np.log(p))
+        
+    return np.mean(logp)
