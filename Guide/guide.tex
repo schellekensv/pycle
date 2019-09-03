@@ -4,6 +4,8 @@
 \title{The guide to Pycle (\textbf{Py}thon \textbf{C}ompresive \textbf{Le}arning toolbox)}
 \author{Vincent Schellekens}
 
+\newcommand{\code}{\texttt}
+
 \begin{document}
 
 % TODO 
@@ -18,11 +20,18 @@
 
 \section{What is Compressive Learning?}
 % TODO
+See \cite{gribonval2017compressive} for a complete introduction to compressive learning.
 
 \section{An overview of Pycle}
 % TODO explain how it is structured, how to use
 
-% See papers for more
+A typical use of Pycle follows the following steps:
+\begin{enumerate}
+	\item Design a sketch operator, then sketch the dataset using the \code{sketching.py} module.
+	\item Extract a model from the sketch by a compressive learning method contained in the \code{compressive\_learning.py} module.
+\end{enumerate}
+
+
 
 \section{Documentation}
 \subsection{Sketching methods} 
@@ -33,5 +42,11 @@
 
 \section{Examples}
 % TODO some examples, or put notebooks instead?
+
+
+\newpage
+\bibliography{guidebib.bib}
+\bibliographystyle{ieeetr}
+
 
 \end{document}
