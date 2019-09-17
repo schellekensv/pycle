@@ -1,10 +1,18 @@
 \documentclass[]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath,amssymb,bm} % math stuff
+
+\usepackage{tikz}
+\usetikzlibrary{arrows,calc,positioning,shadows,shapes}
+
 
 %opening
 \title{The guide to Pycle (\textbf{Py}thon \textbf{C}ompresive \textbf{Le}arning toolbox)}
 \author{Vincent Schellekens}
 
 \newcommand{\code}{\texttt}
+\renewcommand{\Vec}[1]{\bm{#1}} % Pour les vecteurs, re if using amsmath
+
 
 \begin{document}
 
@@ -30,6 +38,30 @@ A typical use of Pycle follows the following steps:
 	\item Design a sketch operator, then sketch the dataset using the \code{sketching.py} module.
 	\item Extract a model from the sketch by a compressive learning method contained in the \code{compressive\_learning.py} module.
 \end{enumerate}
+
+
+
+
+
+	
+		
+\begin{figure}[!htb]
+	\centering
+		\begin{tikzpicture}
+		% Place nodes
+		\node (dataset) at (0,0) {$X$};
+		\node (sketch) at (3,0) {$\Vec{z}_X$};
+		\node (parameters) at (6,0) {$\Theta$};
+		
+		% Draw edges
+		\draw [->, thick, -latex] (dataset) -- (sketch);
+		\draw [->, thick, -latex] (sketch) -- (parameters);
+		\end{tikzpicture}
+	\caption{Flowchart of a typical compressive learning execution with Pycle.}
+	\label{fig:flowchart}
+\end {figure}
+		
+
 
 
 

@@ -105,6 +105,7 @@ def SSE(X,C):
         SSE += np.min(np.linalg.norm(C-X[i],axis=1))**2
     return SSE
 
+
 def loglikelihood_GMM(P,X,robust = True):
     """Computes the loglikelihood of GMM model P on data X, defined as follows:
         loglikelihood = (1/n) * sum_{i=1..n} log(sum_{k=1..K} (w_k)*N(x_i ; mu_k, Sigma_k) )
