@@ -1,35 +1,56 @@
 # General imports
 import numpy as np
+import sys
+
+NUMBA_INSTALLED = True
+try:
+    import numba
+except ImportError:
+    NUMBA_INSTALLED = False
+    
 
 ### 1: General sketching function
-def computeSketch(X, sketchFun, sketchDim, datasetWeigths = None):
-    """Computes the general sketch of a dataset.
+def computeSketch(dataset, sketchFun, datasetWeigths = None):
+    """
+    Computes the sketch of a dataset with a generic feature map.
+    
+    More precisely, evaluates
+        z = sum_{x_i in X} w_i * Phi(x_i)
+    where X is the dataset, Phi is the sketch feature map, w_i are weights (typically 1/n).
     
     Arguments:
-        - 
+        - dataset        : (n,d) numpy array containing the dataset of n examples in dimension d
+        - sketchFun      : function mapping numpy arrays (n,) -> (m,), the feature map Phi
+        - datasetWeights : (n,) numpy array, weigths w_i in the sketch (default: None, corresponds to w_i = 1/n)
         
-    Returns: a tuple (X,weigths,means,covariances) of four numpy arrays
-        - 
+    Returns: 
+        - sketch : (m,) numpy array, the sketch as defined above
     """
     # TODO :
     # + BASIC IMPLEMENTATION
     # + allow for weigthed sketch
-    # - modify to allow for parallel computing
+    # + write the docstring
     # - add possibility to specify classes
     # - defensive programming
-    # - write the docstring
-    (N,d) = X.shape # number samples, dimension    
     
+    (n,d) = dataset.shape # number samples, dimension 
+    
+    # Determine the sketch dimension and check 1) the dataset is nonempty and 2) the map works
+    try:
+        m = sketchFeatureMap(dataset[0]).shape[0]
+    except:
+        print("Unexpected error while calling the sketch feature map:", sys.exc_info()[0])
+        raise
+    
+    sketch = np.zeros(m)
     if datasetWeigths is None:
-        sketch = np.zeros(sketchDim)
-        for i in range(N):
-            sketch = sketch + sketchFun(X[i])/N
+        for i in range(n):
+            sketch = sketch + sketchFun(dataset[i])/n
     else:
         # TODO efficient
         # sketch = datasetWeigths@sketchFun(X) (crashes)
-        sketch = np.zeros(sketchDim)
-        for i in range(N):
-            sketch = sketch + sketchFun(X[i])*datasetWeigths[i]
+        for i in range(n):
+            sketch = sketch + sketchFun(dataset[i])*datasetWeigths[i]
     return sketch
 
 def sensisitivty_sketch(m,n,c_normalization = 1.,sketchFeatureFunction = 'complexExponential',DPdef = 'replace',c_xi = 1,sensitivity_type = 1):
@@ -79,17 +100,26 @@ def sensisitivty_sketch(m,n,c_normalization = 1.,sketchFeatureFunction = 'comple
     return S
 
 
-def computeSketch_DP(X, sketchFun, sketchDim, epsilon, delta = 0, c_normalization = 1.,sketchFeatureFunction = 'complexExponential',DPdef = 'replace',c_xi = 1.):
+def computeSketch_DP(X, sketchFun, sketchDim, epsilon, delta = 0, c_normalization = 1.,sketchFeatureFunction = 'complexExponential',DPdef = 'replace',c_xi = 1.,improveGaussMechanism=True):
     """TODO"""
     # TODO what about the real case?
     # Compute the usual sketch
     (n,d) = X.shape
     z_clean = computeSketch(X, sketchFun, sketchDim)
     
+    
+    if epsilon == np.inf:
+        return z_clean
+    
     if delta > 0:
         # Gaussian mechanism
         S = sensisitivty_sketch(sketchDim,n,c_normalization,sketchFeatureFunction,DPdef,c_xi,sensitivity_type = 2) # L2
-        sigma = np.sqrt(2*np.log(1.25/delta))*S/epsilon
+        if improveGaussMechanism: # Use the sharpened bounds
+            import agm
+            sigma = agm.calibrateAnalyticGaussianMechanism(epsilon, delta, S)
+        else: # use usual bounds
+            if epsilon >= 1: print('WARNING: with epsilon >= 1 the sigma bound doesn\'t hold! Privacy is NOT ensured!')
+            sigma = np.sqrt(2*np.log(1.25/delta))*S/epsilon
         noise = np.random.normal(scale = sigma, size=sketchDim) + 1j*np.random.normal(scale = sigma, size=sketchDim) # todoreal
     else: 
         # Laplacian mechanism
@@ -204,4 +234,40 @@ def fourierSeriesEvaluate(t,coefficients,T=2*np.pi):
     for i in range(2*int(K)+1):
         ft += coefficients[i]*np.exp(1j*(2*np.pi)*ks[i]*t/T)
     return ft
+
+
+# Instantiate the RFF sketch feature map
+def generateRRFmap(Omega,xi,use_numba = True,return_gradient = True):
+    """
+    Returns a function computing the (complex) random Fourier features and its gradient:
+        RFF(x) = exp(i*(Omega*x + xi))
+    where i is the imaginary unit, Omega and xi are provided. Uses numba acceleration by default.
+        
+    Arguments:
+        
+    Returns:
+    """
+    def _RFF(x):
+        return np.exp(1j*(np.dot(Omega.T,x) + xi))
+
+    def _grad_RFF(x):
+        return 1j*np.exp(1j*(np.dot(Omega.T,x) + xi))*Omega
+    
+    if use_numba and not NUMBA_INSTALLED:
+        use_numba = False # Numba was not found, we can't use it
+        print('Warning: numba not found, falling back to python. Recommended to install numba.')
+    
+    # Use a numba wrapper around the functions
+    if use_numba:
+        RFF = numba.jit(nopython=True)(_RFF)
+        grad_RFF = numba.jit(nopython=True)(_grad_RFF) # No gain??
+    else:
+        RFF = _RFF
+        grad_RFF = _grad_RFF
+        
+    # Return RFF map with its gradient if needed
+    if return_gradient:
+        return (RFF,grad_RFF)
+    else:
+        return RFF
 
