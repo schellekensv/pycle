@@ -24,9 +24,10 @@ def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds 
     
     ## 0) Handle input
     z = empiricalSketch
-    m = z.shape[0]
-    d = dimension
     Omega = fourierSketchingMatrix
+    (d,m) = Omega.shape
+    
+    
     xi = dithering
     
     if sketchNormalConstant is None:
@@ -153,7 +154,7 @@ def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds 
             ## 2.1] Step 1 : find new atom theta most correlated with residual
             # Initialize the new atom
             mu0 = np.random.uniform(lowb,uppb) # initial mean at random
-            sig0 = np.ones(d) # initial covariance matrix is identity
+            sig0 = np.ones(d) # initial covariance matrix is identity TODO DO SOMETHING SMARTER
             x0 = stacktheta(mu0,sig0)
             # And solve
             
@@ -236,6 +237,10 @@ def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds 
 
 
 def CKM(empiricalSketch,sketchFeatureFun,sketchFeatureGrad,dimension,K,bounds = None,nIterations = None,normalized=True):
+    # TODO
+    # - Docstring
+    # - Warning if no bounds?
+    
     # ? task = 'K-Means','GMM',... should also include K somewhere
     # 
     # should contain methods to compute the gradients for the different steps?

@@ -37,7 +37,7 @@ def computeSketch(dataset, sketchFun, datasetWeigths = None):
     
     # Determine the sketch dimension and check 1) the dataset is nonempty and 2) the map works
     try:
-        m = sketchFeatureMap(dataset[0]).shape[0]
+        m = sketchFun(dataset[0]).shape[0]
     except:
         print("Unexpected error while calling the sketch feature map:", sys.exc_info()[0])
         raise
