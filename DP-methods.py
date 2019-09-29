@@ -460,3 +460,153 @@ def DP_EM_forGMM(X,K,epsilon,delta,maxiter = 20,budget_allocation='zCDP-GGG',del
     if verbose > 1: plotGMM(X,(w,mus,Sigmas))
         
     return (w,mus,Sigmas)
+
+
+##########################################################
+#                  DP-GMM fot GMM FITTING                #
+##########################################################
+
+
+# TODO: check conditions are met? Enforce them?
+def DP_GMM(X,K,epsilon,max_iter = 20,weight_smoothing = 0.05, initialization = 'privgene', verbose = 0):
+    """DP-GMM algorithm for Differentially Private fitting of gaussian mixture models.
+    Adds Laplacian noise on all learned parameters at each iteration of the usual EM algorithm,
+    then post-processes those noisy parameters to ensure the parameters still meet necessary conditions.
+    From "Differentially private density estimation via Gaussian mixtures model", Wu et al. (2016).
+    
+    Arguments:
+        - X: (n,d)-numpy array, the dataset of n examples in dimension d
+        - K: int, the number of Gaussian modes
+        - epsilon:  real (>0), privacy budget
+        - max_iter: int, the number of EM iterations to perform (default 20)
+        - weight_smoothing: real, the weight smoothing term delta from the method (default = 0.05)
+        - initialization: string
+        - verbose:  int, indicates the amount of information printed during execution (from 0 (no info,default) to 2 (full debug mode))
+
+        
+    Returns: a tuple (w,mus,Sigmas) of three numpy arrays
+        - w:      (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
+        - mus:    (K,d)  -numpy array containing the means of the Gaussians
+        - Sigmas: (K,d,d)-numpy array containing the covariance matrices of the Gaussians
+    """
+    
+    # Parse input    
+    (n,d) = X.shape
+    lowb = np.amin(X,axis=0)
+    uppb = np.amax(X,axis=0)
+    R = np.linalg.norm(X,ord=1,axis=1).max() # TODO : beaks DP?
+    
+    # Allocate privacy budget (magic numbers from the paper)
+    eps_w      = 0.04*epsilon/max_iter
+    eps_mus    = 0.16*epsilon/(max_iter*K)
+    eps_Sigmas = 0.70*epsilon/(max_iter*K)
+    # Compensate if we don't use a DP initialization
+    if initialization is 'uniform':     
+        eps_w      *= 10/9 
+        eps_mus    *= 10/9
+        eps_Sigmas *= 10/9
+    
+    
+    # Initializations
+    w = np.ones(K)/K
+    mus = np.empty((K,d))
+    Sigmas = np.empty((K,d,d)) # Covariances are initialized as random diagonal covariances, with folded Gaussian values
+
+    # TODO CLEAN THIS MESS
+    if initialization in ['PrivGene','privgene','Privgene']:
+        centroids_privgene = PrivGene_kmeans(X,K,0.1*epsilon,verbose=verbose)
+        r = np.empty((n,K)) # Matrix of posterior probabilities, here memory allocation only
+        for k in range(K):
+            mus[k] = centroids_privgene[k]
+            Sigmas[k] = np.diag(np.abs(0.01*np.random.randn(d))) # TODO CHANGE MAGIC NUMBER
+            r[:,k] = w[k]*multivariate_normal.pdf(X, mean=mus[k], cov=Sigmas[k],allow_singular=True)
+        r = (r.T/np.sum(r,axis=1)).T # Normalize (the posterior probabilities sum to 1). Dirty :-(
+    elif initialization is 'uniform':
+        r = np.empty((n,K)) # Matrix of posterior probabilities, here memory allocation only
+        for k in range(K):
+            mus[k] = np.random.uniform(lowb,uppb)
+            Sigmas[k] = np.diag(np.abs(0.01*np.random.randn(d)))
+            r[:,k] = w[k]*multivariate_normal.pdf(X, mean=mus[k], cov=Sigmas[k],allow_singular=True)
+        r = (r.T/np.sum(r,axis=1)).T # Normalize (the posterior probabilities sum to 1). Dirty :-(
+        # Check if condition is met:
+
+        if np.any(np.sum(r,axis=0)/n < 1/(2*K)):
+            print("WARNING: condition on weights for DP-GMM algorithm is not met. DP-GMM will fail.")
+        else:
+            print('condition on weights for DP-GMM algorithm OK.')
+
+    else:
+        raise Exception('Unreckognized initialization method ({}). Aborting.'.format(initialization))
+        
+    # Compute sensitivities
+    S_w      = K/n
+    S_mus    = 4*R*K/n                       # Valid only if ||x_i||_1 <= R, sum_i(r_ik) >= n/(2*K)
+    S_Sigmas = (12*n*K*R*R+8*K*K*R*R)/(n**2) # Valid only if ||x_i||_1 <= R, sum_i(r_ik) >= n/(2*K)
+
+    # Main loop
+    for i in range(max_iter):
+        if verbose > 0: print('DP-GMM iteration: ',i)
+        if verbose > 1: plotGMM(X,(w,mus,Sigmas))
+        # E step
+        for k in range(K):
+            #print(np.linalg.det(Sigmas[k]))
+            #print(Sigmas[k])
+            r[:,k] = w[k]*multivariate_normal.pdf(X, mean=mus[k], cov=Sigmas[k],allow_singular=True)
+        r = (r.T/np.sum(r,axis=1)).T # Normalize (the posterior probabilities sum to 1). Dirty :-(
+        
+        if np.any(np.sum(r,axis=0)/n < 1/(2*K)):
+            print("WARNING: condition on weights for DP-GMM algorithm is not met. Privacy guarantee broke.")
+        else:
+            print('condition on weights for DP-GMM algorithm OK.')
+
+        # M step: 1) update w
+        w = np.sum(r,axis=0)/n 
+
+        # M step: 2) update centers
+        for k in range(K):
+            mus[k] = r[:,k]@X/np.sum(r[:,k])
+
+        # M step: 3) update Sigmas
+        for k in range(K):
+            # Dumb implementation
+            num = np.zeros((d,d))
+            for i in range(n):
+                num += r[i,k]*np.outer(X[i]-mus[k],X[i]-mus[k])
+            if np.sum(r[:,k]) > 1/(n*1000):
+                Sigmas[k] = num/np.sum(r[:,k])
+            else: # class is completely empty, restart
+                Sigmas[k] = np.diag(np.abs(0.01*np.random.randn(d)))
+            # Dirty trick to avoid singularities
+            #Sigmas[k] += (1e-10)*np.eye(d)
+
+        # (end of one usual EM iteration)
+        
+        # Noise adding step
+        w   += np.random.laplace(scale=(S_w/eps_w), size=K)
+        mus += np.random.laplace(scale=(S_mus/eps_mus), size=(K,d))
+        for k in range(K):
+            noiseSigmak = np.random.laplace(scale=(S_Sigmas/eps_Sigmas), size=(d,d))
+            iu = np.triu_indices(d,1) # Some black magic to have symmetric noise matrix
+            il = (iu[1],iu[0])
+            noiseSigmak[il]=noiseSigmak[iu]
+            Sigmas[k] += noiseSigmak
+        
+        
+        # Post-processing step: 1) post-process w
+        w = (w - w.min())/(w.max()-w.min()) # Map to [0,1]
+        w += weight_smoothing # Smoothing
+        w /= np.sum(w) # Normalize
+        
+        # Post-processing step: 2) post-process Sigmas
+        for k in range(K):
+            (eigs,_) = np.linalg.eig(Sigmas[k]) # Compute eigenvalues
+            #deltaSigmak = max(-eigs.min()+,0)     # Min constant to add
+            deltaSigmak = max(-eigs.min()+1e-3,0)     # Min constant to add
+            Sigmas[k] += deltaSigmak*np.eye(d)
+            # Dirty trick to avoid singularities
+            #Sigmas[k] += (1e-10)*np.eye(d)
+            #print(np.linalg.eig(Sigmas[k]))
+            #print(np.linalg.det(Sigmas[k]))
+    if verbose > 0: plotGMM(X,(w,mus,Sigmas))
+        
+    return (w,mus,Sigmas)
