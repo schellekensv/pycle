@@ -1,3 +1,7 @@
+
+# GENERAL TODOS
+# - Allow for 1D datasets
+
 # General imports
 import numpy as np
 import sys
@@ -100,12 +104,14 @@ def sensisitivty_sketch(m,n,c_normalization = 1.,sketchFeatureFunction = 'comple
     return S
 
 
-def computeSketch_DP(X, sketchFun, sketchDim, epsilon, delta = 0, c_normalization = 1.,sketchFeatureFunction = 'complexExponential',DPdef = 'replace',c_xi = 1.,improveGaussMechanism=True):
+def computeSketch_DP(X, sketchFun, sketchDim, epsilon, delta = 0, c_normalization = 1.,sketchFeatureFunction = 'complexExponential',DPdef = 'replace',c_xi = 1.,improveGaussMechanism=True,z_clean = None):
     """TODO"""
     # TODO what about the real case?
     # Compute the usual sketch
     (n,d) = X.shape
-    z_clean = computeSketch(X, sketchFun, sketchDim)
+    
+    if z_clean is None:
+        z_clean = computeSketch(X, sketchFun)
     
     
     if epsilon == np.inf:
@@ -141,20 +147,20 @@ def drawDithering(m,bounds = None):
         (lowb,highb) = bounds
     return np.random.uniform(low=lowb,high=highb,size=m)
 
-def drawFrequencies_Gaussian(n,m,Sigma = None):
+def drawFrequencies_Gaussian(d,m,Sigma = None):
     '''draws frequencies according to some sampling pattern''' # add good specs
     if Sigma is None:
-        Sigma = np.identity(n)
-    Om = np.random.multivariate_normal(np.zeros(n), np.linalg.inv(Sigma), m).T # inverse of sigma
+        Sigma = np.identity(d)
+    Om = np.random.multivariate_normal(np.zeros(d), np.linalg.inv(Sigma), m).T # inverse of sigma
     return Om
 
-def drawFrequencies_FoldedGaussian(n,m,Sigma = None):
+def drawFrequencies_FoldedGaussian(d,m,Sigma = None):
     '''draws frequencies according to some sampling pattern
     omega = R*Sigma^{-1/2}*phi, for R from folded Gaussian with variance 1, phi uniform''' 
     if Sigma is None:
-        Sigma = np.identity(n)
+        Sigma = np.identity(d)
     R = np.abs(np.random.randn(m)) # folded standard normal distribution radii
-    phi = np.random.randn(n,m)
+    phi = np.random.randn(d,m)
     phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
     SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) # TO CHECK
     
@@ -184,7 +190,7 @@ def pdfAdaptedRadius(r):
     return np.sqrt(r**2 + (r**4)/4)*np.exp(-(r**2)/2) 
 
 
-def drawFrequencies_AdaptedRadius(n,m,Sigma = None):
+def drawFrequencies_AdaptedRadius(d,m,Sigma = None):
     '''draws frequencies according to some sampling pattern
     omega = R*Sigma^{-1/2}*phi, for R from adapted with variance 1, phi uniform''' 
     if Sigma is None:
@@ -194,7 +200,7 @@ def drawFrequencies_AdaptedRadius(n,m,Sigma = None):
     r = np.linspace(0,4,1001) # what are the best params? this seems reasonable
     R = sampleFromPDF(pdfAdaptedRadius(r),r,nsamples=m)
     
-    phi = np.random.randn(n,m)
+    phi = np.random.randn(d,m)
     phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
     SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) # TO CHECK
     
@@ -237,7 +243,7 @@ def fourierSeriesEvaluate(t,coefficients,T=2*np.pi):
 
 
 # Instantiate the RFF sketch feature map
-def generateRRFmap(Omega,xi,use_numba = True,return_gradient = True):
+def generateRRFmap(Omega,xi = None,use_numba = True,return_gradient = True):
     """
     Returns a function computing the (complex) random Fourier features and its gradient:
         RFF(x) = exp(i*(Omega*x + xi))
@@ -247,6 +253,10 @@ def generateRRFmap(Omega,xi,use_numba = True,return_gradient = True):
         
     Returns:
     """
+    
+    if xi is None:
+        xi = np.zeros(Omega.shape[1])
+    
     def _RFF(x):
         return np.exp(1j*(np.dot(Omega.T,x) + xi))
 

@@ -298,6 +298,5 @@ def plotGMM(X,P,dims=(0,1),d=2,proportionInGMM = None):
     
     return
 
-plotGMM(X,P_true)
 
 # TODO plot centroids?

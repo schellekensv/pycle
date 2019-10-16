@@ -1,24 +1,27 @@
 # General imports
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import nnls, minimize
 import scipy
+from scipy.optimize import nnls, minimize
 
-def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds = None,nIterations = None,bestOfRuns=1,sketchNormalConstant=None,verbose=0):
+def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds = None,nIterations = None,bestOfRuns=1,sketchNormalConstant=None,GMMoutputFormat=True,verbose=0):
     """Learns a Gaussian Mixture Model (GMM) from the complex exponential sketch of a dataset ("compressively").
     The sketch given in argument is asumed to be of the following form:
-        z = (1/N) * sum_{i = 1}^N exp(j*[Omega*x_i + xi]),
+        z = (1/n) * sum_{i = 1}^n exp(j*[Omega*x_i + xi]),
     and the Gaussian Mixture to estimate will have a density given by (N is the usual Gaussian density):
         P(x) = sum_{k=1}^K alpha_k * N(x;mu_k,Sigma_k)       s.t.      sum_k alpha_k = 1.
     
     Arguments:
         - empiricalSketch: (m,)-numpy array of complex reals, the sketch z of the dataset to learn from
         - K: int, the number of Gaussians in the mixture to estimate
-        - fourierSketchingMatrix: (n,m)-numpy array of reals, the Omega
+        - fourierSketchingMatrix: (d,m)-numpy array of reals, the Omega matrix
+        - dithering: (m,)-numpy array
         
-        
-    Returns: a tuple (X,weigths,means,covariances) of four numpy arrays
-        - TODO
+    TODO explain the different options, here by default one only    
+    Returns: a tuple (w,mus,Sigmas) of three numpy arrays
+        - alpha:  (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
+        - mus:    (K,d)  -numpy array containing the means of the Gaussians
+        - Sigmas: (K,d,d)-numpy array containing the covariance matrices of the Gaussians
     """
     # TODO support for nondiagonal covariances
     
@@ -231,9 +234,25 @@ def CLOMPR_GMM(empiricalSketch,K,fourierSketchingMatrix,dithering = None,bounds 
             bestResidualNorm = runResidualNorm
             bestTheta = Theta
             bestalpha = alpha
+            
+
+    if GMMoutputFormat:
+        return ThetasToGMM(bestTheta,bestalpha)
     
     return (bestTheta,bestalpha)
 
+
+
+def ThetasToGMM(Th,al):
+    """util function, converts the output of CL-OMPR to a (weights,centers,covariances)-tuple (GMM encoding in this notebook)"""
+    (K,d2) = Th.shape
+    d = int(d2/2)
+    clompr_mu = np.zeros([K,d])
+    clompr_sigma = np.zeros([K,d,d])
+    for k in range(K):
+        clompr_mu[k] = Th[k,0:d]
+        clompr_sigma[k] = np.diag(Th[k,d:2*d])
+    return (al/np.sum(al),clompr_mu,clompr_sigma)
 
 
 def CKM(empiricalSketch,sketchFeatureFun,sketchFeatureGrad,dimension,K,bounds = None,nIterations = None,normalized=True):
