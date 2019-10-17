@@ -28,17 +28,45 @@
 
 \section{What is Compressive Learning?}
 % TODO
+
+		
+\begin{figure}[!htb]
+	\centering
+	\begin{tikzpicture}
+	% Place nodes
+	\node [label=below:Dataset] (dataset) at (0,0) {$X$};
+	\node [label=below:Sketch] (sketch) at (3,0) {$\Vec{z}_X$};
+	\node [label=below:Parameters] (parameters) at (6,0) {$\Theta$};
+	
+	% Draw edges
+	\draw [->, thick, -latex] (dataset) -- (sketch);
+	\draw [->, thick, -latex] (sketch) -- (parameters);
+	\end{tikzpicture}
+	\caption{Compressive learning .}
+	\label{fig:CL}
+	\end {figure}
+
+
 See \cite{gribonval2017compressive} for a complete introduction to compressive learning.
 
 \section{An overview of Pycle}
 % TODO explain how it is structured, how to use
+
+
+\subsection{Requirements}
+The Pycle package builds on a set of standard Python libraries, that are required to run it:
+\begin{itemize}
+	\item \code{numpy}
+	\item \code{scipy}
+\end{itemize}
+
+\subsection{Typical workflow}
 
 A typical use of Pycle follows the following steps:
 \begin{enumerate}
 	\item Design a sketch operator, then sketch the dataset using the \code{sketching.py} module.
 	\item Extract a model from the sketch by a compressive learning method contained in the \code{compressive\_learning.py} module.
 \end{enumerate}
-
 
 
 
