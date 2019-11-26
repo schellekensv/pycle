@@ -243,7 +243,7 @@ def fourierSeriesEvaluate(t,coefficients,T=2*np.pi):
 
 
 # Instantiate the RFF sketch feature map
-def generateRRFmap(Omega,xi = None,use_numba = True,return_gradient = True):
+def generateRRFmap(Omega,xi = None,use_numba = True,return_gradient = True,normalize = False):
     """
     Returns a function computing the (complex) random Fourier features and its gradient:
         RFF(x) = exp(i*(Omega*x + xi))
@@ -254,14 +254,19 @@ def generateRRFmap(Omega,xi = None,use_numba = True,return_gradient = True):
     Returns:
     """
     
+    if normalize:
+        c_norm = 1./np.sqrt(Omega.shape[1]) # 1/sqrt(m)
+    else:
+        c_norm = 1.
+    
     if xi is None:
         xi = np.zeros(Omega.shape[1])
     
     def _RFF(x):
-        return np.exp(1j*(np.dot(Omega.T,x) + xi))
+        return c_norm*np.exp(1j*(np.dot(Omega.T,x) + xi))
 
     def _grad_RFF(x):
-        return 1j*np.exp(1j*(np.dot(Omega.T,x) + xi))*Omega
+        return 1j*c_norm*np.exp(1j*(np.dot(Omega.T,x) + xi))*Omega
     
     if use_numba and not NUMBA_INSTALLED:
         use_numba = False # Numba was not found, we can't use it

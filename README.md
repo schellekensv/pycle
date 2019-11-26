@@ -1,6 +1,6 @@
 # pycle
-PYthon Compressive LEarning (also known as sketched learning) toolbox.
-*Work in progress*, do not use this (yet).
+Pycle, stands for PYthon Compressive LEarning. It is a toolbox of methods to perform compressive learning (also known as sketched learning), where the training set is not used directly but first heavily compressed; this allows to learn from large-scale datasets with drastically reduced computational resources.
+*Pycle is currently under development* (version `0.9`), so please come back soon or use it at your own risks.
 
 ## Planned features
 This is a rough plan of the next features to be implemented.
