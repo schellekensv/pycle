@@ -2,18 +2,19 @@
 
 import numpy as np
 from scipy.stats import multivariate_normal
+import matplotlib.pyplot as plt
 
 ############################
 # DATASET GENERATION TOOLS #
 ############################
 
-def generateGMMdataset(d,K,n,balanced=True,isotropic=True,normalize=None):
+def generatedataset_GMM(d,K,n,balanced=True,isotropic=True,normalize=None):
     """Generate a synthetic dataset according to a Gaussian Mixture Model distribution.
     
     Arguments:
         - d: int, the dataset dimension
         - K: int, the number of Gaussian modes
-        - n: int, the number of elements in the dataset
+        - n: int, the number of elements in the dataset (cardinality)
         - balanced:  bool (default=True), if True the Gaussians have the same weigths
         - isotropic: bool (default=True), if True each Gaussian has covariance of type scalar*Identity
         - normalize: string (default=None), if not None describes how to normalize the dataset. Available options:
@@ -272,20 +273,21 @@ def plotGMM(X,P,dims=(0,1),d=2,proportionInGMM = None):
     # To finish
     # Get K from the thing 
     (w,mus,Sigmas) = P # Unpack
+    K = w.size
     dim0,dim1=dims
     if proportionInGMM is None:
         # for 95, d = 2%
         cst=2*np.sqrt(5.991)
     else:
         cst = 2*np.sqrt(chi2.isf(1-proportionInGMM, d)) # check https://www.visiondummy.com/2014/04/draw-error-ellipse-representing-covariance-matrix/
-    
-    plt.scatter(X[:,dim0],X[:,dim1],s=0.5)
+    plt.figure(figsize=(5,5))
+    plt.scatter(X[:,dim0],X[:,dim1],s=1, alpha=0.15)
     ax = plt.gca()
 
     for k in range(K):
         mu = mus[k]
         sigma_sol = np.diag(Sigmas[k])
-        plt.scatter(mu[dim0],mu[dim1],s=100*w[k],c='r')
+        plt.scatter(mu[dim0],mu[dim1],s=200*w[k],c='r')
 
         wEll = cst*np.sqrt(sigma_sol[dim0])
         hEll = cst*np.sqrt(sigma_sol[dim1])

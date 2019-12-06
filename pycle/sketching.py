@@ -2,6 +2,8 @@
 
 # Main imports
 import numpy as np
+import matplotlib.pyplot as plt # For verbose
+import scipy.optimize
 import sys          # For error handling
 
 NUMBA_INSTALLED = True
@@ -107,14 +109,169 @@ def drawFrequencies(drawType,d,m,Sigma = None):
     """
     if Sigma is None:
         Sigma = np.identity(d)
-    if drawType.lower() in ["drawfrequencies_gaussian","gaussian","g"]
+    if drawType.lower() in ["drawfrequencies_gaussian","gaussian","g"]:
         drawFunc = drawFrequencies_Gaussian
-    elif drawType.lower() in ["drawfrequencies_foldedgaussian","foldedgaussian","folded_gaussian","fg"]
+    elif drawType.lower() in ["drawfrequencies_foldedgaussian","foldedgaussian","folded_gaussian","fg"]:
         drawFunc = drawFrequencies_Gaussian
-    elif drawType.lower() in ["drawfrequencies_adapted","adaptedradius","adapted_radius","ar"]
+    elif drawType.lower() in ["drawfrequencies_adapted","adaptedradius","adapted_radius","ar"]:
         drawFunc = drawFrequencies_AdaptedRadius
     return drawFunc(d,m,Sigma)
 
+# The following funtion allows to estimate Sigma
+def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
+    """Automatically estimates the "Sigma" parameter (the scale of data clusters) for generating the sketch operator.
+    
+    We assume here that Sigma = sigma2_bar * identity matrix. 
+    To estimate sigma2_bar, lightweight sketches of size m0 are generated from (a small subset of) the dataset
+    with candidate values for sigma2_bar. Then, sigma2_bar is updated by fitting a Gaussian
+    to the absolute values of the obtained sketch. Cfr. https://arxiv.org/pdf/1606.02838.pdf, sec 3.3.3.
+    
+    Arguments:
+        - dataset: (n,d) numpy array, the dataset X: n examples in dimension d
+        - m0: int, number of candidate 'frequencies' to draw (can be typically smaller than m).
+        - c:  int (default 20), number of 'boxes' (i.e. number of maxima of sketch absolute values to fit)
+        - n0: int or None, if given, n0 samples from the dataset are subsampled to be used for Sigma estimation
+        - nIterations: int (default 5), the maximum number of iteration (typically stable after 2 iterations)
+        - verbose: 0,1 or 2, amount of information to print (default: 0, no info printed). Useful for debugging.
+        
+    Returns:
+        - Sigma: (d,d)-numpy array, the (diagonal) estimated covariance of the clusters in the dataset
+    """
+    # TODOS:
+    # - allow K > 1
+    # - estimate nonisotropic Sigma?
+    
+    (n,d) = dataset.shape
+    # X is the subsampled dataset containing only n0 examples
+    if n0 is not None and n0<n:
+        X = dataset[np.random.choice(n,n0,replace=False)]
+    else:
+        X = dataset
+    
+    # Initialization
+    sigma2_bar = 1
+    K = 1 # For later extension
+    s = m0//c # number of freqs per box
+    drawFreq_type = "AR" # To change? 
+    
+    # Optimization problem to fit a GMM curve to the data
+    def _fun_grad_fit_sigmas(p,R,z):
+        """
+        Function and gradient to solve the optimization problem
+            min_{w,sigs2} sum_{i = 1}^n ( z[i] - sum_{k=1}^K w[k]*exp(-R[i]^2*sig2[k]/2) )^2
+        Arguments:
+            - p, a (2K,) numpy array obtained by stacking
+                - w : (K,) numpy array
+                - sigs2 : (K,) numpy array
+            - R: (n,) numpy array, data to fit (x label)
+            - z: (n,) numpy array, data to fit (y label)
+        Returns:
+            - The function evaluation
+            - The gradient
+        """
+
+        K = p.size//2
+        w = p[:K]
+        sigs2 = p[K:]
+        n = R.size
+        # Naive implementation, TODO better?
+        fun = 0
+        grad = np.zeros(2*K)
+        for i in range(n):
+            fun += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.))**2
+            grad[:K] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- np.exp(-(sigs2*R[i]**2)/2.)) # grad of w
+            grad[K:] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- w * np.exp(-(sigs2*R[i]**2)/2.)) * (-0.5*R[i]**2) # grad of sigma2
+        return (fun,grad)
+    
+    # For normalization in the optimization problem
+    def _callback(p):
+        p[:K] /= np.sum(p[:K])
+    
+    # Bounds of the optimization problem
+    bounds = []
+    for k in range(K): bounds.append([1e-5,1]) # bounds for the weigths
+    for k in range(K): bounds.append([1e-12,1e12]) # bounds for the sigmas
+
+    # Actual algorithm
+    for i in range(nIterations):
+        # Draw frequencies according to current estimate 
+        Omega0 = drawFrequencies(drawFreq_type,d,m0,Sigma = sigma2_bar*np.eye(d)) # To update K > 1
+        
+        # Sort the frequencies
+        Rs = np.linalg.norm(Omega0,axis=0)
+        i_sort = np.argsort(Rs)
+        Omega0 = Omega0[:,i_sort]
+        Rs = Rs[i_sort]
+        
+        # Compute unnormalized complex exponential sketch
+        Phi0 = SimpleFeatureMap("ComplexExponential",Omega0)
+        z0 = computeSketch(X,Phi0) 
+        
+        # find the indices of the max of each block
+        jqs = np.empty(c) 
+        for ic in range(c):
+            j_max = np.argmax(np.abs(z0)[ic*s:(ic+1)*s]) + ic*s
+            jqs[ic] = j_max
+        jqs = jqs.astype(int)
+        R_tofit = Rs[jqs]
+        z_tofit = np.abs(z0)[jqs]
+        
+        # Plot if required
+        if verbose > 1:
+            plt.figure(figsize=(10,5))
+            plt.plot(Rs,np.abs(z0),'.')
+            plt.plot(Rs[jqs],np.abs(z0)[jqs],'.')
+            plt.xlabel('R')
+            plt.ylabel('|z|')
+            plt.show()
+        
+        # Set up the fitting opt. problem
+        f = lambda p: _fun_grad_fit_sigmas(p,R_tofit,z_tofit) # cost
+        
+        p0 = np.zeros(2*K) # initial point
+        p0[:K] = np.ones(K)/K # w
+        p0[K:] = np.random.uniform(0.5,1.5,K)/(np.median(R_tofit)**2) # sig2, heuristic to have good gradient at start
+    
+        # Solve the sigma^2 optimization problem
+        sol = scipy.optimize.minimize(f, p0,jac = True, bounds = bounds,callback=_callback)
+        p = sol.x
+        w = np.array(p[:K])#/np.sum(p[:K])
+        sig2 = np.array(p[K:])
+        
+        # Plot if required
+        if verbose > 1:
+            rfit = np.linspace(0,Rs.max(),100)
+            zfit = np.zeros(rfit.shape)
+            for k in range(K):
+                zfit += w[k]*np.exp(-(sig2[k]*rfit**2)/2.)
+            plt.plot(Rs,np.abs(z0),'.')
+            plt.plot(R_tofit,z_tofit,'.')
+            plt.plot(rfit,zfit)
+            plt.xlabel('R')
+            plt.ylabel('|z|')
+            plt.show()
+            
+        # Update
+        sigma2_bar = sig2[0]
+        
+    # Show final fit
+    if verbose > 0:
+        rfit = np.linspace(0,Rs.max(),100)
+        zfit = np.zeros(rfit.shape)
+        for k in range(K):
+            zfit += w[k]*np.exp(-(sig2[k]*rfit**2)/2.)
+        plt.plot(Rs,np.abs(z0),'.')
+        plt.plot(R_tofit,z_tofit,'.')
+        plt.plot(rfit,zfit)
+        plt.xlabel('R')
+        plt.ylabel('|z|')
+        plt.legend(['abs. values of sketch','max abs values on blocks','fitted Gaussian'])
+        plt.show()
+
+
+    Sigma = sigma2_bar*np.eye(d)
+    
+    return Sigma
 
 
 #######################################
@@ -266,7 +423,7 @@ class SimpleFeatureMap(FeatureMap):
     
     def grad(self,x):
         """Gradient (Jacobian matrix) of Phi, as a (d,m)-numpy array"""
-        return self.c_norm*self.f_grad(np.dot(self.Omega.T,x) + self.xi)*Omega
+        return self.c_norm*self.f_grad(np.dot(self.Omega.T,x) + self.xi)*self.Omega
     
 
 #######################################
