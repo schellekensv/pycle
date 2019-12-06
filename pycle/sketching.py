@@ -524,7 +524,7 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
         raise ValueException('The featureMap argument does not match one of the supported formats.')
     
     # Sensitivity is given by S = c_featureMap * c_sensitivity_type * c_DPdef, check all three conditions (ughh)
-    if featureMapName.lower() is 'complexexponential':
+    if featureMapName.lower() == 'complexexponential':
         if sensitivity_type == 1:
             if DPdef.lower() in ['remove','add','remove/add','standard','udp']:
                 return m*np.sqrt(2)*(c_normalization/n)
@@ -535,7 +535,7 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
                 return np.sqrt(m)*(c_normalization/n)
             elif DPdef.lower() in ['replace','bdp']:
                 return np.sqrt(m)*np.sqrt(2)*(c_normalization/n)
-    elif featureMapName.lower() is 'universalquantization': # Assuming normalized in [-1,+1], TODO check real/complex case?
+    elif featureMapName.lower() == 'universalquantization': # Assuming normalized in [-1,+1], TODO check real/complex case?
         if sensitivity_type == 1:
             if DPdef.lower() in ['remove','add','remove/add','standard','udp']:
                 return m*2*(c_normalization/n)
@@ -546,8 +546,8 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
                 return np.sqrt(m)*np.sqrt(2)*(c_normalization/n)
             elif DPdef.lower() in ['replace','bdp']:
                 return np.sqrt(2)*np.sqrt(m)*np.sqrt(2)*(c_normalization/n)
-            
-    raise Exception('The sensitivity for this (feature map,DP definition) combination is not implemented.')
+    print(sensitivity_type)
+    raise Exception('You provided ({},{});\nThe sensitivity for this (feature map,DP definition) combination is not implemented.'.format(featureMapName.lower(),DPdef.lower()))
     return None
     
 
@@ -599,13 +599,15 @@ def computeSketch_DP(dataset, featureMap, epsilon, delta = 0,DPdef = 'UDP',useIm
     if epsilon == np.inf: # Non-private
         return z_clean
     
-    useBDP = DPdef.lower() in ['replace','bdp'] # otherwise assume UDP
+    useBDP = DPdef.lower() in ['replace','bdp'] # otherwise assume UDP, TODO DEFENSIVE
+    
+    # We will need the sketch size
+    m = z_clean.size
     
     # Split privacy budget
     if useBDP: # Then no noise on the denom
         budget_split_num = 1.
     elif budget_split_num is None:
-        m = z_clean.size
         budget_split_num = (2*m)/(2*m + 1)
     # TODO defensive programming to block budget split > 1?
     epsilon_num = budget_split_num*epsilon
@@ -616,17 +618,17 @@ def computeSketch_DP(dataset, featureMap, epsilon, delta = 0,DPdef = 'UDP',useIm
         S = sensisitivty_sketch(featureMap,DPdef = DPdef,sensitivity_type = 2) # L2
         
         if useImproveGaussMechanism: # Use the sharpened bounds
-            from third_party import calibrateAnalyticGaussianMechanism
+            from .third_party import calibrateAnalyticGaussianMechanism
             sigma = calibrateAnalyticGaussianMechanism(epsilon_num, delta, S)
         else: # use usual bounds
             if epsilon >= 1: raise Error('WARNING: with epsilon >= 1 the sigma bound doesn\'t hold! Privacy is NOT ensured!')
             sigma = np.sqrt(2*np.log(1.25/delta))*S/epsilon_num
-        noise_num = np.random.normal(scale = sigma, size=sketchDim) + 1j*np.random.normal(scale = sigma, size=sketchDim) # TODO real
+        noise_num = np.random.normal(scale = sigma, size=m) + 1j*np.random.normal(scale = sigma, size=m) # TODO real
     else: 
         # Laplacian mechanism
         S = sensisitivty_sketch(featureMap,DPdef = DPdef,sensitivity_type = 1) # L1
         beta = S/epsilon_num # L1 sensitivity/espilon
-        noise_num = np.random.laplace(scale = beta, size=sketchDim) + 1j*np.random.laplace(scale = beta, size=sketchDim) 
+        noise_num = np.random.laplace(scale = beta, size=m) + 1j*np.random.laplace(scale = beta, size=m) 
         
     # Add denominator noise if needed
     if useBDP: # Then no noise on the denom
@@ -644,3 +646,6 @@ def computeSketch_DP(dataset, featureMap, epsilon, delta = 0,DPdef = 'UDP',useIm
 # Short-term:
 #  - Add support of private sketching for the real variants of the considered maps
 #  - Add the square nonlinearity, for sketching for PCA for example
+
+# Long-term:
+# - Fast sketch computation and clean numba if not needed
