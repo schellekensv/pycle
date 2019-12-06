@@ -1,7 +1,7 @@
 \documentclass[]{article}
 \usepackage[latin1]{inputenc}
 \usepackage{amsmath,amssymb,bm} % math stuff
-
+\usepackage[top=1.85cm, bottom=1.65cm, left=2.2cm, right=2.2cm]{geometry}
 
 % FOR DISPLAYING CODE
 \usepackage{listings}
@@ -154,9 +154,9 @@ A typical use of Pycle follows the following steps:
 
 
 \section{A tutorial tour of \code{pycle}}
-
+We now explain the core features of \code{pycle}. I'll go over each of the submodules one by one and introduce, in a ``tutorial style'', the most important tools they provide. Our focus being on understanding, this section is neither concise nor exhaustive (however, section \ref{sec:documentation} is a methodical list of all the toolbox features).
 \subsection{Sketching} 
-To use the \code{sketching} submodule, you first need to import it (I personally like \code{sk} as shorthand). Usual sketching as defined in~\eqref{eq:sketching} can then be done by calling \code{sk.computeSketch} as follows.
+To use the \code{sketching} submodule, you first need to import it (to spare me some typing, I personally like tu use \code{sk} as shorthand). Usual sketching as defined in~\eqref{eq:sketching} can then be done by calling \code{sk.computeSketch} as follows.
 \begin{lstlisting}
 import pycle.sketching as sk
 
@@ -166,19 +166,33 @@ Phi = ... # sketch feature map, see later
 z = sk.computeSketch(X,Phi)
 \end{lstlisting}
 
-As you might have guessed, \code{sk.computeSketch(dataset,featureMap)} requires two arguments, the dataset encoded as a numpy array, and the feature map $\Phi$.
+\noindent As you might have guessed, \code{sk.computeSketch(dataset,featureMap)} requires two arguments: the dataset $X$, and the feature map $\Phi$. Let's start with the simplest one: the dataset $X$ should be given as a 2d numpy array of dimensions $(n,d)$.
 
-\note{\textbf{Dataset representation conventions}.
-In \code{pycle}, we follow the mainstream convention for datasets, where a collection of $a$ vectors in dimension $b$ is encoded as a numpy array of size $(a,b)$. Thus, the dataset $X = (\Vec{x}_i \in \mathbb R^d)_{i = 1}^n$ is a $(n,d)$ numpy array (even when $d = 1$) which means that \code{X[0]} references $\Vec{x_1}$. Similarly, the projection matrix $\Omega = (\Vec{\omega}_j \in \mathbb R^d)_{j = 1}^m$ is a $(m,d)$ array, etc.}
+\note{\textbf{Matrix representation conventions}.
+We follow the same convention as most mainstream Python ML modules: the dataset, that we mathematically describe as $X = (\Vec{x}_i \in \mathbb R^d)_{i = 1}^n \in \mathbb R^{d \times n}$, is represented by a numpy array of shape $(n,d)$. In particular, \code{X[0]} references $\Vec{x_1}$: note the awkward inversion of dimension order. For matrices that don't represent datasets (e.g., $\Omega$ in the examples below), we stick to the mathematical convention instead, i.e., a matrix of the type $\mathbb R^{a \times b}$ is represented by a numpy array of shape $(a,b)$.}
 
-The feature map argument can be specified in one of the two following ways. Either you give an instance of a \code{FeatureMap} object, which we explain below, or you directly provide a custom callable function (e.g., to compute the second-order moments for the sketch, write \code{Phi = lambda x: x**2}).
+\noindent The feature map argument can be specified in one of the two following ways. Either---and this is the method I recommend---you give an instance of a \code{FeatureMap} object (explained below), or you directly provide a callable Python function (e.g., to compute the second-order moments for the sketch, write \code{Phi = lambda x: x**2}). Note that the second method is proposed for research purposes, in the case you want to construct a custom feature map that cannot be instantiated with the methods provided within the \code{FeatureMap} class.
 
-\note{\textbf{FeatureMap objects}. TO CHANGE
-At this point, you might be wondering why we bother to construct a \code{FeatureMap} object instead of a function to represent... well, a (mathematical) function, namely $\Phi$. The reason is that actual learning algorithms (from \code{pycle.compressive\_learning}) or even other sketching functionalities (e.g., privacy preservation) require not just the ability to evaluate $\Phi$ but other information about it (e.g., its target dimension $m$, its jacobian $\nabla\Phi$, whether it belongs to a set of standard maps etc.). Those informations are packaged in the \code{FeatureMap} object for your convenience.}
+% I arrived here
+
+\note{\textbf{FeatureMap objects}.
+Why do we use \code{FeatureMap} objects instead of (Python) functions to represent... well, (mathematical) functions? Because we often require additional metadata/methods about $\Phi$ (e.g., target dimension $m$, jacobian $\nabla\Phi$,...). All these parameters and methods are conveniently packaged inside \code{FeatureMap} objects.}
+
+\emph{Voilà}, you know the basics of how the \code{sketching} submodule is used! Well, OK, all we saw was a function that computes an average, but hey, that's like, the essence of sketching, it's not my fault. Luckily for you, \code{sketching} has much more to offer. First and foremost, I'll demonstrate the whole zoo of feature maps that are readily available---I promise you, you'll construct your \code{FeatureMap} object $\Phi$ in no more than two lines of code. After this comes more advanced methods of the toolbox that you may not need right away: I'll show how to automatically select the \emph{scale hyper-parameter} in the aforementioned feature maps (which in practice can be hard to guess \emph{a priori}); I'll then finally explain \code{pycle}s functions for sketching with Differential Privacy guarantees. 
+
+\subsubsection{Painless instantiation of standard feature maps: the \code{SimpleFeatureMap} class}
+...
+
+\subsubsection{Designing the sampling pattern in the feature maps: the \code{estimateSigma} function}
+
+\subsubsection{Guaranteeing the Differential Privacy of sketching: the \code{computeSketch\_DP} function}
 
 
+% Explain the FeatureMap
 
-% Motivation
+% Come back to the code
+
+% Privacy
 
 \subsection{Learning} 
 
@@ -186,15 +200,24 @@ At this point, you might be wondering why we bother to construct a \code{Feature
 
 
 \section{Documentation}
+\label{sec:documentation}
 \subsection{Sketching methods} 
 
 \subsection{Learning tools} 
 
 \subsection{Utilities} 
 
-\section{Examples}
-% TODO some examples, or put notebooks instead?
 
+
+
+\section{Conclusion: going further}
+My primary goals for \code{pycle} are that it should be:
+\begin{itemize}
+	\item \textbf{intuitive to use:} practitioners with no background knowledge in compressive learning and little experience in Python should be able to use it to implement compressive learning in their own projects;
+	\item \textbf{flexible to new features:} researchers with interest in compressive learning (that want to try out new methods/techniques in CL) should be able to easily extend this code to suit their own needs, without having to re-write things from scratch (and eventually, suggesting to add some features to the toolbox);
+	\item \textbf{efficient to run:} the main motivation of compressive learning is based on the fact that it can be much more memory- and time-efficient than traditional learning methods, so the performances of the toolbox should fulfill that promise (note: this goal is still a challenge for me, this item is rather wishful thinking). 
+\end{itemize}
+With this in mind, if you have any suggestions to improve the toolbox, please don't hesitate to contact me!
 
 \newpage
 \bibliography{guidebib.bib}
