@@ -181,7 +181,26 @@ Why do we use \code{FeatureMap} objects instead of (Python) functions to represe
 \emph{Voilà}, you know the basics of how the \code{sketching} submodule is used! Well, OK, all we saw was a function that computes an average, but hey, that's like, the essence of sketching, it's not my fault. Luckily for you, \code{sketching} has much more to offer. First and foremost, I'll demonstrate the whole zoo of feature maps that are readily available---I promise you, you'll construct your \code{FeatureMap} object $\Phi$ in no more than two lines of code. After this comes more advanced methods of the toolbox that you may not need right away: I'll show how to automatically select the \emph{scale hyper-parameter} in the aforementioned feature maps (which in practice can be hard to guess \emph{a priori}); I'll then finally explain \code{pycle}s functions for sketching with Differential Privacy guarantees. 
 
 \subsubsection{Painless instantiation of standard feature maps: the \code{SimpleFeatureMap} class}
-...
+All feature maps used in CL up to now are of the following form, which we call ``Simple Feature Map'',
+\begin{equation}
+\Phi(\Vec{x}) = f(\Omega^T\Vec{x} + \Vec{\xi}), \quad \text{where} \quad \Omega = [\Vec{\omega}_1, \cdots, \Vec{\omega}_m] \in \mathbb{R}^{d \times m}, \: \Vec{\xi} = [\xi_1, \cdots, \xi_m]^T \in \mathbb{R}^{m},
+\end{equation}
+and $f$ is a point-wise nonlinearity (i.e., $\Phi_j(\Vec{x}) = f(\Vec{\omega}_j^T\Vec{x} + \xi_j)$ for all $j$). In general, you can instantiate such a nonlinearity in pycle in the following way:
+\begin{lstlisting}
+import pycle.sketching as sk
+
+f = ...       # nonlinearity (Python function, tuple or string)
+Omega = ...   # (d,m) numpy array
+xi = ...      # (m,) numpy array
+Phi = sk.SimpleFeatureMap(f, Omega, xi)
+\end{lstlisting}
+
+Moreover, the ``usual'' arguments for this simple feature map can be easily called, as we explain below.
+\begin{itemize}
+	\item nonlinearity
+	\item projection
+	\item dithering
+\end{itemize}
 
 \subsubsection{Designing the sampling pattern in the feature maps: the \code{estimateSigma} function}
 
