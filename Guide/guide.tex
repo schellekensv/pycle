@@ -2,7 +2,7 @@
 \usepackage[latin1]{inputenc}
 \usepackage{amsmath,amssymb,bm} % math stuff
 \usepackage[top=1.85cm, bottom=1.65cm, left=2.2cm, right=2.2cm]{geometry}
-
+\usepackage{url}
 % FOR DISPLAYING CODE
 \usepackage{listings}
 \usepackage{color}
@@ -59,12 +59,14 @@
 
 
 %opening
-\title{The guide to Pycle (\textbf{Py}thon \textbf{C}ompresive \textbf{Le}arning toolbox)}
+\title{An introductory guide to \pycle \\
+	\large (the \textbf{Py}thon \textbf{c}ompresive \textbf{le}arning toolbox)}
 \author{Vincent Schellekens}
 
 \newcommand{\code}{\texttt}
+\newcommand{\pycle}{\code{pycle}}
 \renewcommand{\Vec}[1]{\bm{#1}} % Pour les vecteurs, re if using amsmath
-
+\newcommand{\bb}{\mathbb}
 
 \begin{document}
 
@@ -74,12 +76,12 @@
 \maketitle
 
 \begin{abstract}
-	This is the guide to Pycle, a toolbox for Compressive Learning. It is structured as follows: first we shortly explain the theoretical methods this toolbox implements. Then, we explain how the toolbox is structured, and the main steps that a user should follow to use it. The detailed documentation of all the functionalities in the toolbox is then provided, followed by some practical examples to get started easily.
+	This is a beginner-friendly guide to \pycle: a Python toolbox to perform compressive/sketched learning. I first shortly explain what ``compressive learning'' means, and how this toolbox is organized. I then explain, in a detailed tutorial, how you should use (or, who knows, extend?) its main features. If you'd rather dive in right away, I also wrote some practical examples available as jupyter notebooks on \pycle s main github page (\url{https://github.com/schellekensv/pycle}).
 \end{abstract}
 
-
-\section{What is Compressive Learning?}
-% TODO
+\section{Introduction}
+\subsection{What is compressive learning?}
+In usual machine learning, we fit some parameters $\theta$ (e.g., a regression curve, centroids in k-means clustering, weights in a neural network...) to a given set of training data $X$. The actual algorithms for such tasks usually necessitate to access the training set multiple times (one complete pass on the dataset is sometimes called an ``epoch''). This can be cumbersome when the dataset is extremely large, or distributed across different machines. Compressive learning (CL, also called sketched learning) seeks to circumvent this issue by compressing the whole dataset into one lightweight ``sketch'' vector, that requires only one pass on the dataset and can be computed in parallel. The inconveniently large can then be discarded, and learning is done using only this sketch. This allows to significantly reduce the computational resources that are needed to handle massive collections of data.
 
 
 		
@@ -89,50 +91,53 @@
 	% Place nodes
 	\node [label=below:Dataset] (dataset) at (0,0) {$X$};
 	\node [label=below:Sketch] (sketch) at (3,0) {$\Vec{z}_X$};
-	\node [label=below:Parameters] (parameters) at (6,0) {$\Theta$};
+	\node [label=below:Parameters] (parameters) at (6,0) {$\theta$};
 	
 	% Draw edges
 	\draw [->, thick, -latex] (dataset) -- (sketch);
 	\draw [->, thick, -latex] (sketch) -- (parameters);
 	\end{tikzpicture}
-	\caption{Compressive learning .}
+	\caption{The compressive learning workflow.}
 	\label{fig:CL}
 	\end {figure}
 
+More precisely, CL comprises two steps (Figure \ref{fig:CL}):
+\begin{enumerate}
+	\item \textbf{Sketching:} The dataset $X = \{\Vec{x}_i \: | \: i = 1, ..., n\}$ (where we assume $\Vec{x}_i \in \bb R^d$) is compressed as a sketch vector that we note $\Vec{z}_X$, defined as the average over the dataset of some features $\Phi(\Vec{x}_i)$ (the function $\Phi : \mathbb R^d \mapsto \mathbb C^m$ or $\bb R^m$ computes $m$ features, possibly complex):
+		\begin{equation}
+		\label{eq:sketching}
+		\Vec{z}_X := \frac{1}{n} \sum_{i = 1}^n \Phi(\Vec{x}_i).
+		\end{equation}
+	Since this is a simple averaging, sketching can be done on different chunks of $X$ independently, which is quite handy in distributed or streaming applications.
+	\item \textbf{Learning:} The target model parameters $\theta$ are then obtained by some algorithm $\Delta$ that operates \emph{only} on this sketch,
+		\begin{equation}
+			\theta = \Delta(\Vec{z}_X).
+		\end{equation}
+		Typically, this involves solving some optimization problem $\min_{\theta} f(\theta ; \Vec{z}_X)$.
+\end{enumerate}
 
-\begin{equation}
-\label{eq:sketching}
-	\Vec{z}_X := \frac{1}{n} \sum_{i = 1}^n \Phi(\Vec{x}_i)
-\end{equation}
+In the following, these steps are intuitively explained, the formal details being introduced only as needed; for a more solid/exhaustive overview of compressive learning, see \cite{gribonval2017compressive}.
 
-See \cite{gribonval2017compressive} for a complete introduction to compressive learning.
-
-\section{An overview of Pycle}
 % TODO explain how it is structured, how to use
 
 
 \subsection{Requirements}
-The Pycle package builds on a set of standard Python libraries, that are required to run it: % standard in scientific computing with python
-\begin{itemize}
-	\item \code{numpy}
-	\item \code{scipy}
-	\item \code{matplotlib}
-\end{itemize}
+The \pycle~package is built on standard Python scientific computing libraries: \code{numpy}, \code{scipy} and \code{matplotlib}; if you don't already have them installed, follow the instructions at \url{https://www.scipy.org/install.html}. %
+
+% todo latest versions?
 
 % You can install those packages by...
 
-\subsection{Typical workflow}
+\subsection{Toolbox organization}
 
 A typical use of Pycle follows the following steps:
 \begin{enumerate}
 	\item Design a sketch operator, then sketch the dataset using the \code{sketching.py} module.
 	\item Extract a model from the sketch by a compressive learning method contained in the \code{compressive\_learning.py} module.
+	\item We also have some \code{utils.py} module.
+	\item We also have a \code{third\_party.py} module.
 \end{enumerate}
 
-
-
-
-	
 		
 \begin{figure}[!htb]
 	\centering
@@ -173,8 +178,6 @@ We follow the same convention as most mainstream Python ML modules: the dataset,
 
 \noindent The feature map argument can be specified in one of the two following ways. Either---and this is the method I recommend---you give an instance of a \code{FeatureMap} object (explained below), or you directly provide a callable Python function (e.g., to compute the second-order moments for the sketch, write \code{Phi = lambda x: x**2}). Note that the second method is proposed for research purposes, in the case you want to construct a custom feature map that cannot be instantiated with the methods provided within the \code{FeatureMap} class.
 
-% I arrived here
-
 \note{\textbf{FeatureMap objects}.
 Why do we use \code{FeatureMap} objects instead of (Python) functions to represent... well, (mathematical) functions? Because we often require additional metadata/methods about $\Phi$ (e.g., target dimension $m$, jacobian $\nabla\Phi$,...). All these parameters and methods are conveniently packaged inside \code{FeatureMap} objects.}
 
@@ -185,7 +188,7 @@ All feature maps used in CL up to now are of the following form, which we call `
 \begin{equation}
 \Phi(\Vec{x}) = f(\Omega^T\Vec{x} + \Vec{\xi}), \quad \text{where} \quad \Omega = [\Vec{\omega}_1, \cdots, \Vec{\omega}_m] \in \mathbb{R}^{d \times m}, \: \Vec{\xi} = [\xi_1, \cdots, \xi_m]^T \in \mathbb{R}^{m},
 \end{equation}
-and $f$ is a point-wise nonlinearity (i.e., $\Phi_j(\Vec{x}) = f(\Vec{\omega}_j^T\Vec{x} + \xi_j)$ for all $j$). In general, you can instantiate such a nonlinearity in pycle in the following way:
+and $f$ is a point-wise nonlinearity (i.e., $\Phi_j(\Vec{x}) = f(\Vec{\omega}_j^T\Vec{x} + \xi_j)$ for all $j$). One way to interpret this map is to associate it with a one-layer neural network (where we don't necessarily learn the ``weights'' $\Omega$). You can instantiate such a nonlinearity in \code{pycle} in the following way:
 \begin{lstlisting}
 import pycle.sketching as sk
 
@@ -197,8 +200,8 @@ Phi = sk.SimpleFeatureMap(f, Omega, xi)
 
 Moreover, the ``usual'' arguments for this simple feature map can be easily called, as we explain below.
 \begin{itemize}
-	\item nonlinearity
-	\item projection
+	\item \textbf{Nonlinearity:} you can simply pass in any Python function $\bb R \mapsto \bb C$ or $\bb R$. However, computing the gradient\footnote{Noting the Jacobian matrix $\nabla \Phi(\Vec{x}) = [\nabla \Phi_1(\Vec{x}) , \cdots , \nabla \Phi_m(\Vec{x}) ] \in \bb R^{d \times m}$ and $f'(t) = \frac{\mathrm{d}f(t)}{\mathrm{d}t}$ applied component-wise, we have $ \nabla \Phi(\Vec{x}) = \mathrm{diag} \left( f'(\Omega^T \Vec{x} + \Vec{\xi})\right) \cdot \Omega.$} $\nabla\Phi$ requires $\frac{\mathrm{d}f(t)}{\mathrm{d}t}$; you can also pass in a tuple of functions $(f,\frac{\mathrm{d}f(t)}{\mathrm{d}t})$ so that you can use gradient-based CL methods later. Lastly, you can use one of the predefined nonlinearities by passing a string matching one of the implemented nonlinearities. Those are : ...
+	\item \textbf{Projection:} 
 	\item dithering
 \end{itemize}
 
