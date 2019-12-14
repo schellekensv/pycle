@@ -76,12 +76,12 @@
 \maketitle
 
 \begin{abstract}
-	This is a beginner-friendly guide to \pycle: a Python toolbox to perform compressive/sketched learning. I first shortly explain what ``compressive learning'' means, and how this toolbox is organized. I then explain, in a detailed tutorial, how you should use (or, who knows, extend?) its main features. If you'd rather dive in right away, I also wrote some practical examples available as jupyter notebooks on \pycle s main github page (\url{https://github.com/schellekensv/pycle}).
+	This is a beginner-friendly guide to \pycle: a Python toolbox to perform compressive/sketched learning. It first shortly explains what ``compressive learning'' means, and how this toolbox is organized. A detailed tutorial then teaches you how you should use (or, who knows, extend?) its main features. If you'd rather dive in right away, I also wrote some practical examples available as jupyter notebooks on \pycle s main github page (\url{https://github.com/schellekensv/pycle}).
 \end{abstract}
 
 \section{Introduction}
 \subsection{What is compressive learning?}
-In usual machine learning, we fit some parameters $\theta$ (e.g., a regression curve, centroids in k-means clustering, weights in a neural network...) to a given set of training data $X$. The actual algorithms for such tasks usually necessitate to access the training set multiple times (one complete pass on the dataset is sometimes called an ``epoch''). This can be cumbersome when the dataset is extremely large, or distributed across different machines. Compressive learning (CL, also called sketched learning) seeks to circumvent this issue by compressing the whole dataset into one lightweight ``sketch'' vector, that requires only one pass on the dataset and can be computed in parallel. The inconveniently large can then be discarded, and learning is done using only this sketch. This allows to significantly reduce the computational resources that are needed to handle massive collections of data.
+In usual machine learning, we fit some parameters $\theta$ (e.g., a parametric curve in regression, centroids in k-means clustering, weights in a neural network...) to a given set of training data $X$. The actual algorithms for such tasks usually necessitate to access this training set multiple times (one complete pass on the dataset is sometimes called an ``epoch''). This can be cumbersome when the dataset is extremely large, and/or distributed across different machines. Compressive learning (CL, also called sketched learning) seeks to circumvent this issue by compressing the whole dataset into one lightweight ``sketch'' vector, that requires only one pass on the dataset and can be computed in parallel. Learning is then done using only this sketch instead of the inconveniently large dataset (that can be discarded). This allows to significantly reduce the computational resources that are needed to handle massive collections of data.
 
 
 		
@@ -116,7 +116,7 @@ More precisely, CL comprises two steps (Figure \ref{fig:CL}):
 		Typically, this involves solving some optimization problem $\min_{\theta} f(\theta ; \Vec{z}_X)$.
 \end{enumerate}
 
-In the following, these steps are intuitively explained, the formal details being introduced only as needed; for a more solid/exhaustive overview of compressive learning, see \cite{gribonval2017compressive}.
+\noindent In the following, these steps are explained intuitively, the formal details being introduced only when needed; for a more solid/exhaustive overview of compressive learning, see \cite{gribonval2017compressive}.
 
 % TODO explain how it is structured, how to use
 
@@ -129,37 +129,18 @@ The \pycle~package is built on standard Python scientific computing libraries: \
 % You can install those packages by...
 
 \subsection{Toolbox organization}
-
-A typical use of Pycle follows the following steps:
+The \pycle toolbox is a collection of several submodules:
 \begin{enumerate}
-	\item Design a sketch operator, then sketch the dataset using the \code{sketching.py} module.
-	\item Extract a model from the sketch by a compressive learning method contained in the \code{compressive\_learning.py} module.
-	\item We also have some \code{utils.py} module.
-	\item We also have a \code{third\_party.py} module.
+	\item The \code{sketching.py} module instantiates feature maps then computes the sketch of datasets with it.
+	\item The \code{compressive\_learning.py} module contains the actual ``learning'' methods, extracting the desired parameters from the sketch.
+	\item The \code{utils.py} module contains miscellaneous auxiliary functions, amongst others for generating synthetic datasets and evaluate the obtained solutions (as well quantitatively with well-defined metrics as qualitatively with visualization tools).
+	\item Finally, the \code{third\_party.py} module serves to group code chunks used by \pycle that are written by other developers but not published as independent packages.
 \end{enumerate}
-
-		
-\begin{figure}[!htb]
-	\centering
-		\begin{tikzpicture}
-		% Place nodes
-		\node (dataset) at (0,0) {$X$};
-		\node (sketch) at (3,0) {$\Vec{z}_X$};
-		\node (parameters) at (6,0) {$\Theta$};
-		
-		% Draw edges
-		\draw [->, thick, -latex] (dataset) -- (sketch);
-		\draw [->, thick, -latex] (sketch) -- (parameters);
-		\end{tikzpicture}
-	\caption{Flowchart of a typical compressive learning execution with Pycle.}
-	\label{fig:flowchart}
-\end {figure}
-		
 
 
 
 \section{A tutorial tour of \code{pycle}}
-We now explain the core features of \code{pycle}. I'll go over each of the submodules one by one and introduce, in a ``tutorial style'', the most important tools they provide. Our focus being on understanding, this section is neither concise nor exhaustive (however, section \ref{sec:documentation} is a methodical list of all the toolbox features).
+We now explain the core features of \code{pycle}. I'll go over each of the submodules one by one and introduce, in a ``tutorial style'', the most important tools they provide. Our focus being on understanding, this section is neither concise nor exhaustive. %(however, section \ref{sec:documentation} is a methodical list of all the toolbox features). 
 \subsection{Sketching} 
 To use the \code{sketching} submodule, you first need to import it (to spare me some typing, I personally like tu use \code{sk} as shorthand). Usual sketching as defined in~\eqref{eq:sketching} can then be done by calling \code{sk.computeSketch} as follows.
 \begin{lstlisting}
@@ -221,13 +202,13 @@ Moreover, the ``usual'' arguments for this simple feature map can be easily call
 \subsection{Utilities} 
 
 
-\section{Documentation}
-\label{sec:documentation}
-\subsection{Sketching methods} 
+%\section{Documentation}
+%\label{sec:documentation}
+%\subsection{Sketching methods} 
 
-\subsection{Learning tools} 
+%\subsection{Learning tools} 
 
-\subsection{Utilities} 
+%\subsection{Utilities} 
 
 
 
