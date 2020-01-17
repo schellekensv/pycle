@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017) (preloaded format=pdflatex 2017.9.29)  17 OCT 2019 09:50
+This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017) (preloaded format=pdflatex 2017.9.29)  18 DEC 2019 11:24
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -107,19 +107,100 @@ Package: bm 2017/01/16 v1.2c Bold Symbol Support (DPC/FMi)
 LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 141.
 LaTeX Info: Redefining \bm on input line 207.
 )
+(/usr/local/texlive/2017/texmf-dist/tex/latex/geometry/geometry.sty
+Package: geometry 2010/09/12 v5.6 Page Geometry
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2014/10/28 v1.15 key=value parser (DPC)
+\KV@toks@=\toks21
+)
+(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ifpdf.sty
+Package: ifpdf 2017/03/15 v3.2 Provides the ifpdf switch
+)
+(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ifvtex.sty
+Package: ifvtex 2016/05/16 v1.6 Detect VTeX and its facilities (HO)
+Package ifvtex Info: VTeX not detected.
+)
+(/usr/local/texlive/2017/texmf-dist/tex/generic/ifxetex/ifxetex.sty
+Package: ifxetex 2010/09/12 v0.6 Provides ifxetex conditional
+)
+\Gm@cnth=\count99
+\Gm@cntv=\count100
+\c@Gm@tempcnt=\count101
+\Gm@bindingoffset=\dimen112
+\Gm@wd@mp=\dimen113
+\Gm@odd@mp=\dimen114
+\Gm@even@mp=\dimen115
+\Gm@layoutwidth=\dimen116
+\Gm@layoutheight=\dimen117
+\Gm@layouthoffset=\dimen118
+\Gm@layoutvoffset=\dimen119
+\Gm@dimlist=\toks22
+)
+(/usr/local/texlive/2017/texmf-dist/tex/latex/url/url.sty
+\Urlmuskip=\muskip11
+Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
+)
+(/usr/local/texlive/2017/texmf-dist/tex/latex/listings/listings.sty
+\lst@mode=\count102
+\lst@gtempboxa=\box28
+\lst@token=\toks23
+\lst@length=\count103
+\lst@currlwidth=\dimen120
+\lst@column=\count104
+\lst@pos=\count105
+\lst@lostspace=\dimen121
+\lst@width=\dimen122
+\lst@newlines=\count106
+\lst@lineno=\count107
+\lst@maxwidth=\dimen123
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/listings/lstmisc.sty
+File: lstmisc.sty 2015/06/04 1.6 (Carsten Heinz)
+\c@lstnumber=\count108
+\lst@skipnumbers=\count109
+\lst@framebox=\box29
+)
+(/usr/local/texlive/2017/texmf-dist/tex/latex/listings/listings.cfg
+File: listings.cfg 2015/06/04 1.6 listings configuration
+))
+Package: listings 2015/06/04 1.6 (Carsten Heinz)
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/color.sty
+Package: color 2016/07/10 v1.1e Standard LaTeX Color (DPC)
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics-cfg/color.cfg
+File: color.cfg 2016/01/02 v1.6 sample color configuration
+)
+Package color Info: Driver file: pdftex.def on input line 147.
+
+(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics-def/pdftex.def
+File: pdftex.def 2017/01/12 v0.06k Graphics/color for pdfTeX
+
+(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/infwarerr.sty
+Package: infwarerr 2016/05/16 v1.4 Providing info/warning/error messages (HO)
+)
+(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ltxcmds.sty
+Package: ltxcmds 2016/05/16 v1.23 LaTeX kernel commands for general use (HO)
+)
+\Gread@gobject=\count110
+))
+(/usr/local/texlive/2017/texmf-dist/tex/latex/listings/lstlang1.sty
+File: lstlang1.sty 2015/06/04 1.6 listings language file
+)
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/frontendlayer/tikz.sty
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/basiclayer/pgf.sty
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/utilities/pgfrcs.sty
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/utilities/pgfutil-common.te
 x
-\pgfutil@everybye=\toks21
-\pgfutil@tempdima=\dimen112
-\pgfutil@tempdimb=\dimen113
+\pgfutil@everybye=\toks24
+\pgfutil@tempdima=\dimen124
+\pgfutil@tempdimb=\dimen125
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/utilities/pgfutil-common-li
 sts.tex))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/utilities/pgfutil-latex.def
-\pgfutil@abb=\box28
+\pgfutil@abb=\box30
 (/usr/local/texlive/2017/texmf-dist/tex/latex/ms/everyshi.sty
 Package: everyshi 2001/05/15 v3.00 EveryShipout Package (MS)
 ))
@@ -131,10 +212,6 @@ Package: pgf 2015/08/07 v3.0.1a (rcs-revision 1.15)
 (/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/graphicx.sty
 Package: graphicx 2014/10/28 v1.0g Enhanced LaTeX Graphics (DPC,SPQR)
 
-(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/keyval.sty
-Package: keyval 2014/10/28 v1.15 key=value parser (DPC)
-\KV@toks@=\toks22
-)
 (/usr/local/texlive/2017/texmf-dist/tex/latex/graphics/graphics.sty
 Package: graphics 2017/04/14 v1.1b Standard LaTeX Graphics (DPC,SPQR)
 
@@ -145,49 +222,38 @@ Package: trig 2016/01/03 v1.10 sin cos tan (DPC)
 File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
 )
 Package graphics Info: Driver file: pdftex.def on input line 99.
-
-(/usr/local/texlive/2017/texmf-dist/tex/latex/graphics-def/pdftex.def
-File: pdftex.def 2017/01/12 v0.06k Graphics/color for pdfTeX
-
-(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/infwarerr.sty
-Package: infwarerr 2016/05/16 v1.4 Providing info/warning/error messages (HO)
 )
-(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ltxcmds.sty
-Package: ltxcmds 2016/05/16 v1.23 LaTeX kernel commands for general use (HO)
-)
-\Gread@gobject=\count99
-))
-\Gin@req@height=\dimen114
-\Gin@req@width=\dimen115
+\Gin@req@height=\dimen126
+\Gin@req@width=\dimen127
 )
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/systemlayer/pgfsys.sty
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/systemlayer/pgfsys.code.tex
 Package: pgfsys 2014/07/09 v3.0.1a (rcs-revision 1.48)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex
-\pgfkeys@pathtoks=\toks23
-\pgfkeys@temptoks=\toks24
+\pgfkeys@pathtoks=\toks25
+\pgfkeys@temptoks=\toks26
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/utilities/pgfkeysfiltered.c
 ode.tex
-\pgfkeys@tmptoks=\toks25
+\pgfkeys@tmptoks=\toks27
 ))
-\pgf@x=\dimen116
-\pgf@y=\dimen117
-\pgf@xa=\dimen118
-\pgf@ya=\dimen119
-\pgf@xb=\dimen120
-\pgf@yb=\dimen121
-\pgf@xc=\dimen122
-\pgf@yc=\dimen123
+\pgf@x=\dimen128
+\pgf@y=\dimen129
+\pgf@xa=\dimen130
+\pgf@ya=\dimen131
+\pgf@xb=\dimen132
+\pgf@yb=\dimen133
+\pgf@xc=\dimen134
+\pgf@yc=\dimen135
 \w@pgf@writea=\write3
 \r@pgf@reada=\read1
-\c@pgf@counta=\count100
-\c@pgf@countb=\count101
-\c@pgf@countc=\count102
-\c@pgf@countd=\count103
-\t@pgf@toka=\toks26
-\t@pgf@tokb=\toks27
-\t@pgf@tokc=\toks28
+\c@pgf@counta=\count111
+\c@pgf@countb=\count112
+\c@pgf@countc=\count113
+\c@pgf@countd=\count114
+\t@pgf@toka=\toks28
+\t@pgf@tokb=\toks29
+\t@pgf@tokc=\toks30
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/systemlayer/pgf.cfg
 File: pgf.cfg 2008/05/14  (rcs-revision 1.7)
@@ -205,8 +271,8 @@ File: pgfsys-common-pdf.def 2013/10/10  (rcs-revision 1.13)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/systemlayer/pgfsyssoftpath.
 code.tex
 File: pgfsyssoftpath.code.tex 2013/09/09  (rcs-revision 1.9)
-\pgfsyssoftpath@smallbuffer@items=\count104
-\pgfsyssoftpath@bigbuffer@items=\count105
+\pgfsyssoftpath@smallbuffer@items=\count115
+\pgfsyssoftpath@bigbuffer@items=\count116
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/systemlayer/pgfsysprotocol.
 code.tex
@@ -218,6 +284,7 @@ Package: xcolor 2016/05/11 v2.12 LaTeX color extensions (UK)
 File: color.cfg 2016/01/02 v1.6 sample color configuration
 )
 Package xcolor Info: Driver file: pdftex.def on input line 225.
+LaTeX Info: Redefining \color on input line 709.
 Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1348.
 Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1352.
 Package xcolor Info: Model `RGB' extended on input line 1364.
@@ -234,12 +301,12 @@ Package: pgfcore 2010/04/11 v3.0.1a (rcs-revision 1.7)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathcalc.code.tex
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex
-\pgfmath@dimen=\dimen124
-\pgfmath@count=\count106
-\pgfmath@box=\box29
-\pgfmath@toks=\toks29
-\pgfmath@stack@operand=\toks30
-\pgfmath@stack@operation=\toks31
+\pgfmath@dimen=\dimen136
+\pgfmath@count=\count117
+\pgfmath@box=\box31
+\pgfmath@toks=\toks31
+\pgfmath@stack@operand=\toks32
+\pgfmath@stack@operation=\toks33
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.code.
 tex
@@ -260,57 +327,57 @@ code.tex)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.integ
 erarithmetics.code.tex)))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmathfloat.code.tex
-\c@pgfmathroundto@lastzeros=\count107
+\c@pgfmathroundto@lastzeros=\count118
 ))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepoints.co
 de.tex
 File: pgfcorepoints.code.tex 2013/10/07  (rcs-revision 1.27)
-\pgf@picminx=\dimen125
-\pgf@picmaxx=\dimen126
-\pgf@picminy=\dimen127
-\pgf@picmaxy=\dimen128
-\pgf@pathminx=\dimen129
-\pgf@pathmaxx=\dimen130
-\pgf@pathminy=\dimen131
-\pgf@pathmaxy=\dimen132
-\pgf@xx=\dimen133
-\pgf@xy=\dimen134
-\pgf@yx=\dimen135
-\pgf@yy=\dimen136
-\pgf@zx=\dimen137
-\pgf@zy=\dimen138
+\pgf@picminx=\dimen137
+\pgf@picmaxx=\dimen138
+\pgf@picminy=\dimen139
+\pgf@picmaxy=\dimen140
+\pgf@pathminx=\dimen141
+\pgf@pathmaxx=\dimen142
+\pgf@pathminy=\dimen143
+\pgf@pathmaxy=\dimen144
+\pgf@xx=\dimen145
+\pgf@xy=\dimen146
+\pgf@yx=\dimen147
+\pgf@yy=\dimen148
+\pgf@zx=\dimen149
+\pgf@zy=\dimen150
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathconst
 ruct.code.tex
 File: pgfcorepathconstruct.code.tex 2013/10/07  (rcs-revision 1.29)
-\pgf@path@lastx=\dimen139
-\pgf@path@lasty=\dimen140
+\pgf@path@lastx=\dimen151
+\pgf@path@lasty=\dimen152
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathusage
 .code.tex
 File: pgfcorepathusage.code.tex 2014/11/02  (rcs-revision 1.24)
-\pgf@shorten@end@additional=\dimen141
-\pgf@shorten@start@additional=\dimen142
+\pgf@shorten@end@additional=\dimen153
+\pgf@shorten@start@additional=\dimen154
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorescopes.co
 de.tex
 File: pgfcorescopes.code.tex 2015/05/08  (rcs-revision 1.46)
-\pgfpic=\box30
-\pgf@hbox=\box31
-\pgf@layerbox@main=\box32
-\pgf@picture@serial@count=\count108
+\pgfpic=\box32
+\pgf@hbox=\box33
+\pgf@layerbox@main=\box34
+\pgf@picture@serial@count=\count119
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcoregraphicst
 ate.code.tex
 File: pgfcoregraphicstate.code.tex 2014/11/02  (rcs-revision 1.12)
-\pgflinewidth=\dimen143
+\pgflinewidth=\dimen155
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransform
 ations.code.tex
 File: pgfcoretransformations.code.tex 2015/08/07  (rcs-revision 1.20)
-\pgf@pt@x=\dimen144
-\pgf@pt@y=\dimen145
-\pgf@pt@temp=\dimen146
+\pgf@pt@x=\dimen156
+\pgf@pt@y=\dimen157
+\pgf@pt@temp=\dimen158
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorequick.cod
 e.tex
@@ -327,13 +394,13 @@ File: pgfcorepathprocessing.code.tex 2013/09/09  (rcs-revision 1.9)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorearrows.co
 de.tex
 File: pgfcorearrows.code.tex 2015/05/14  (rcs-revision 1.43)
-\pgfarrowsep=\dimen147
+\pgfarrowsep=\dimen159
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreshade.cod
 e.tex
 File: pgfcoreshade.code.tex 2013/07/15  (rcs-revision 1.15)
-\pgf@max=\dimen148
-\pgf@sys@shading@range@num=\count109
+\pgf@max=\dimen160
+\pgf@sys@shading@range@num=\count120
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreimage.cod
 e.tex
@@ -342,7 +409,7 @@ File: pgfcoreimage.code.tex 2013/07/15  (rcs-revision 1.18)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreexternal.
 code.tex
 File: pgfcoreexternal.code.tex 2014/07/09  (rcs-revision 1.21)
-\pgfexternal@startupbox=\box33
+\pgfexternal@startupbox=\box35
 ))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/basiclayer/pgfcorelayers.co
 de.tex
@@ -359,7 +426,7 @@ File: pgfcorepatterns.code.tex 2013/11/07  (rcs-revision 1.5)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/modules/pgfmoduleshapes.cod
 e.tex
 File: pgfmoduleshapes.code.tex 2014/03/21  (rcs-revision 1.35)
-\pgfnodeparttextbox=\box34
+\pgfnodeparttextbox=\box36
 )
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/modules/pgfmoduleplot.code.
 tex
@@ -368,8 +435,8 @@ File: pgfmoduleplot.code.tex 2015/08/03  (rcs-revision 1.13)
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version
 -0-65.sty
 Package: pgfcomp-version-0-65 2007/07/03 v3.0.1a (rcs-revision 1.7)
-\pgf@nodesepstart=\dimen149
-\pgf@nodesepend=\dimen150
+\pgf@nodesepstart=\dimen161
+\pgf@nodesepend=\dimen162
 )
 (/usr/local/texlive/2017/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version
 -1-18.sty
@@ -384,10 +451,10 @@ Package: pgfcomp-version-1-18 2007/07/23 v3.0.1a (rcs-revision 1.1)
 Package: pgffor 2013/12/13 v3.0.1a (rcs-revision 1.25)
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex)
-\pgffor@iter=\dimen151
-\pgffor@skip=\dimen152
-\pgffor@stack=\toks32
-\pgffor@toks=\toks33
+\pgffor@iter=\dimen163
+\pgffor@skip=\dimen164
+\pgffor@stack=\toks34
+\pgffor@toks=\toks35
 ))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.cod
 e.tex
@@ -396,32 +463,32 @@ Package: tikz 2015/08/07 v3.0.1a (rcs-revision 1.151)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothan
 dlers.code.tex
 File: pgflibraryplothandlers.code.tex 2013/08/31 v3.0.1a (rcs-revision 1.20)
-\pgf@plot@mark@count=\count110
-\pgfplotmarksize=\dimen153
+\pgf@plot@mark@count=\count121
+\pgfplotmarksize=\dimen165
 )
-\tikz@lastx=\dimen154
-\tikz@lasty=\dimen155
-\tikz@lastxsaved=\dimen156
-\tikz@lastysaved=\dimen157
-\tikzleveldistance=\dimen158
-\tikzsiblingdistance=\dimen159
-\tikz@figbox=\box35
-\tikz@figbox@bg=\box36
-\tikz@tempbox=\box37
-\tikz@tempbox@bg=\box38
-\tikztreelevel=\count111
-\tikznumberofchildren=\count112
-\tikznumberofcurrentchild=\count113
-\tikz@fig@count=\count114
+\tikz@lastx=\dimen166
+\tikz@lasty=\dimen167
+\tikz@lastxsaved=\dimen168
+\tikz@lastysaved=\dimen169
+\tikzleveldistance=\dimen170
+\tikzsiblingdistance=\dimen171
+\tikz@figbox=\box37
+\tikz@figbox@bg=\box38
+\tikz@tempbox=\box39
+\tikz@tempbox@bg=\box40
+\tikztreelevel=\count122
+\tikznumberofchildren=\count123
+\tikznumberofcurrentchild=\count124
+\tikz@fig@count=\count125
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.cod
 e.tex
 File: pgfmodulematrix.code.tex 2013/09/17  (rcs-revision 1.8)
-\pgfmatrixcurrentrow=\count115
-\pgfmatrixcurrentcolumn=\count116
-\pgf@matrix@numberofcolumns=\count117
+\pgfmatrixcurrentrow=\count126
+\pgfmatrixcurrentcolumn=\count127
+\pgf@matrix@numberofcolumns=\count128
 )
-\tikz@expandcount=\count118
+\tikz@expandcount=\count129
 
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/frontendlayer/tikz/librarie
 s/tikzlibrarytopaths.code.tex
@@ -434,7 +501,7 @@ File: tikzlibraryarrows.code.tex 2008/01/09 v3.0.1a (rcs-revision 1.1)
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/libraries/pgflibraryarrows.
 code.tex
 File: pgflibraryarrows.code.tex 2013/09/23 v3.0.1a (rcs-revision 1.16)
-\arrowsize=\dimen160
+\arrowsize=\dimen172
 ))
 (/usr/local/texlive/2017/texmf-dist/tex/generic/pgf/frontendlayer/tikz/librarie
 s/tikzlibrarycalc.code.tex
@@ -507,56 +574,90 @@ File: tikzlibraryshapes.multipart.code.tex 2008/01/09 v3.0.1a (rcs-revision 1.1
 shapes.multipart.code.tex
 File: pgflibraryshapes.multipart.code.tex 2010/01/07 v3.0.1a (rcs-revision 1.2)
 
-\pgfnodepartlowerbox=\box39
-\pgfnodeparttwobox=\box40
-\pgfnodepartthreebox=\box41
-\pgfnodepartfourbox=\box42
-\pgfnodeparttwentybox=\box43
-\pgfnodepartnineteenbox=\box44
-\pgfnodeparteighteenbox=\box45
-\pgfnodepartseventeenbox=\box46
-\pgfnodepartsixteenbox=\box47
-\pgfnodepartfifteenbox=\box48
-\pgfnodepartfourteenbox=\box49
-\pgfnodepartthirteenbox=\box50
-\pgfnodeparttwelvebox=\box51
-\pgfnodepartelevenbox=\box52
-\pgfnodeparttenbox=\box53
-\pgfnodepartninebox=\box54
-\pgfnodeparteightbox=\box55
-\pgfnodepartsevenbox=\box56
-\pgfnodepartsixbox=\box57
-\pgfnodepartfivebox=\box58
+\pgfnodepartlowerbox=\box41
+\pgfnodeparttwobox=\box42
+\pgfnodepartthreebox=\box43
+\pgfnodepartfourbox=\box44
+\pgfnodeparttwentybox=\box45
+\pgfnodepartnineteenbox=\box46
+\pgfnodeparteighteenbox=\box47
+\pgfnodepartseventeenbox=\box48
+\pgfnodepartsixteenbox=\box49
+\pgfnodepartfifteenbox=\box50
+\pgfnodepartfourteenbox=\box51
+\pgfnodepartthirteenbox=\box52
+\pgfnodeparttwelvebox=\box53
+\pgfnodepartelevenbox=\box54
+\pgfnodeparttenbox=\box55
+\pgfnodepartninebox=\box56
+\pgfnodeparteightbox=\box57
+\pgfnodepartsevenbox=\box58
+\pgfnodepartsixbox=\box59
+\pgfnodepartfivebox=\box60
 ))) (./guide.aux)
 \openout1 = `guide.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 17.
-LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 46.
+LaTeX Font Info:    ... okay on input line 46.
 
-ABD: EveryShipout initializing macros
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+*geometry* verbose mode - [ preamble ] result:
+* driver: pdftex
+* paper: <default>
+* layout: <same size as paper>
+* layoutoffset:(h,v)=(0.0pt,0.0pt)
+* modes: 
+* h-part:(L,W,R)=(62.59596pt, 489.10307pt, 62.59596pt)
+* v-part:(T,H,B)=(52.63777pt, 695.38535pt, 46.94687pt)
+* \paperwidth=614.295pt
+* \paperheight=794.96999pt
+* \textwidth=489.10307pt
+* \textheight=695.38535pt
+* \oddsidemargin=-9.67403pt
+* \evensidemargin=-9.67403pt
+* \topmargin=-56.63222pt
+* \headheight=12.0pt
+* \headsep=25.0pt
+* \topskip=10.0pt
+* \footskip=30.0pt
+* \marginparwidth=65.0pt
+* \marginparsep=11.0pt
+* \columnsep=10.0pt
+* \skip\footins=9.0pt plus 4.0pt minus 2.0pt
+* \hoffset=0.0pt
+* \voffset=0.0pt
+* \mag=1000
+* \@twocolumnfalse
+* \@twosidefalse
+* \@mparswitchfalse
+* \@reversemarginfalse
+* (1in=72.27pt=25.4mm, 1cm=28.453pt)
+
+\c@lstlisting=\count130
 (/usr/local/texlive/2017/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count119
-\scratchdimen=\dimen161
-\scratchbox=\box59
-\nofMPsegments=\count120
-\nofMParguments=\count121
-\everyMPshowfont=\toks34
-\MPscratchCnt=\count122
-\MPscratchDim=\dimen162
-\MPnumerator=\count123
-\makeMPintoPDFobject=\count124
-\everyMPtoPDFconversion=\toks35
+\scratchcounter=\count131
+\scratchdimen=\dimen173
+\scratchbox=\box61
+\nofMPsegments=\count132
+\nofMParguments=\count133
+\everyMPshowfont=\toks36
+\MPscratchCnt=\count134
+\MPscratchDim=\dimen174
+\MPnumerator=\count135
+\makeMPintoPDFobject=\count136
+\everyMPtoPDFconversion=\toks37
 ) (/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/pdftexcmds.sty
 Package: pdftexcmds 2017/03/19 v0.25 Utility functions of pdfTeX for LuaTeX (HO
 )
@@ -564,9 +665,6 @@ Package: pdftexcmds 2017/03/19 v0.25 Utility functions of pdfTeX for LuaTeX (HO
 (/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ifluatex.sty
 Package: ifluatex 2016/05/16 v1.4 Provides the ifluatex switch (HO)
 Package ifluatex Info: LuaTeX not detected.
-)
-(/usr/local/texlive/2017/texmf-dist/tex/generic/oberdiek/ifpdf.sty
-Package: ifpdf 2017/03/15 v3.2 Provides the ifpdf switch
 )
 Package pdftexcmds Info: LuaTeX not detected.
 Package pdftexcmds Info: \pdf@primitive is available.
@@ -606,53 +704,369 @@ G,.JBIG2,.JB2,.eps]
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
-LaTeX Font Info:    Try loading font information for U+msa on input line 22.
+ABD: EveryShipout initializing macros
+LaTeX Font Info:    Try loading font information for U+msa on input line 51.
 
 (/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Try loading font information for U+msb on input line 22.
+LaTeX Font Info:    Try loading font information for U+msb on input line 51.
 
 (/usr/local/texlive/2017/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
-LaTeX Font Info:    Try loading font information for OMS+cmr on input line 59.
+) [1
+
+{/usr/local/texlive/2017/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
+LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <14.4> not available
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 117.
+LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <12> not available
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 120.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 123.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 125.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 126.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+
+Package xcolor Warning: Incompatible color definition on input line 128.
+
+LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <10> not available
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 139.
+[2]
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 148.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 149.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+
+Package xcolor Warning: Incompatible color definition on input line 150.
+
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 156.
 
 (/usr/local/texlive/2017/texmf-dist/tex/latex/base/omscmr.fd
 File: omscmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <10> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 59.
- [1
-
-{/usr/local/texlive/2017/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2] (./
-guide.bbl)
-[3] (./guide.aux) ) 
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 156.
+ [3] (./guide.bbl) [4] (./guide.aux) ) 
 Here is how much of TeX's memory you used:
- 15016 strings out of 492995
- 320778 string characters out of 6132704
- 379544 words of memory out of 5000000
- 18239 multiletter control sequences out of 15000+600000
- 17842 words of font info for 66 fonts, out of 8000000 for 9000
+ 17392 strings out of 492995
+ 352517 string characters out of 6132704
+ 431787 words of memory out of 5000000
+ 20572 multiletter control sequences out of 15000+600000
+ 20236 words of font info for 77 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 55i,8n,82p,441b,637s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfo
-nts/cm/cmbx12.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfon
-ts/cm/cmbx9.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts
-/cm/cmmi10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/
-cm/cmmi7.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm
-/cmmib10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm
-/cmr10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/c
-mr12.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmr
-17.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.
-pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.p
-fb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pf
-b></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb
+ 55i,8n,82p,974b,1247s stack positions out of 5000i,500n,10000p,200000b,80000s
+</usr/local/texlive/2017/texmf-dist/fonts
+/type1/public/amsfonts/cm/cmbx10.pfb></usr/local/texlive/2017/texmf-dist/fonts/
+type1/public/amsfonts/cm/cmbx12.pfb></usr/local/texlive/2017/texmf-dist/fonts/t
+ype1/public/amsfonts/cm/cmbx6.pfb></usr/local/texlive/2017/texmf-dist/fonts/typ
+e1/public/amsfonts/cm/cmbx8.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1
+/public/amsfonts/cm/cmbx9.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/p
+ublic/amsfonts/cm/cmex10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/pu
+blic/amsfonts/cmextra/cmex8.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1
+/public/amsfonts/cm/cmmi10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/
+public/amsfonts/cm/cmmi6.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/pu
+blic/amsfonts/cm/cmmi7.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/publ
+ic/amsfonts/cm/cmmi8.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public
+/amsfonts/cm/cmmib10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public
+/amsfonts/cmextra/cmmib8.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/pu
+blic/amsfonts/cm/cmr10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/publ
+ic/amsfonts/cm/cmr12.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public
+/amsfonts/cm/cmr17.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/a
+msfonts/cm/cmr6.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsf
+onts/cm/cmr7.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfont
+s/cm/cmr8.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/c
+m/cmr9.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/c
+msy10.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cm
+sy6.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy
+7.pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.
+pfb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.p
+fb></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pf
+b></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb
+></usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt8.pfb><
+/usr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb></u
+sr/local/texlive/2017/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb
 >
-Output written on guide.pdf (3 pages, 137087 bytes).
+Output written on guide.pdf (4 pages, 316420 bytes).
 PDF statistics:
- 89 PDF objects out of 1000 (max. 8388607)
- 55 compressed objects within 1 object stream
+ 165 PDF objects out of 1000 (max. 8388607)
+ 111 compressed objects within 2 object streams
  0 named destinations out of 1000 (max. 500000)
  109 words of extra memory for PDF output out of 10000 (max. 10000000)
 

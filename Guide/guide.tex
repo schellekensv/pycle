@@ -32,31 +32,6 @@
 \usetikzlibrary{arrows,calc,positioning,shadows,shapes}
 
 
-% FOR DISPLAYING HELP BOXES
-% Credit goes to Teoman (https://tex.stackexchange.com/questions/66820/how-to-create-highlight-boxes-in-latex)
-\usepackage[most]{tcolorbox}
-\tcbset{textmarker/.style={%
-		enhanced,
-		parbox=false,boxrule=0mm,boxsep=0mm,arc=0mm,
-		outer arc=0mm,left=6mm,right=3mm,top=7pt,bottom=7pt,
-		toptitle=1mm,bottomtitle=1mm,oversize}}
-\newtcolorbox{hintBox}{textmarker,
-	borderline west={6pt}{0pt}{yellow},
-	colback=yellow!10!white}
-\newtcolorbox{importantBox}{textmarker,
-	borderline west={6pt}{0pt}{red},
-	colback=red!10!white}
-\newtcolorbox{noteBox}{textmarker,
-	borderline west={6pt}{0pt}{green},
-	colback=green!10!white}
-
-% define commands for easy access
-\newcommand{\note}[1]{\begin{noteBox} \textbf{Note:} #1 \end{noteBox}}
-\newcommand{\warning}[1]{\begin{hintBox} \textbf{Warning:} #1 \end{hintBox}}
-\newcommand{\important}[1]{\begin{importantBox} \textbf{Important:} #1 \end{importantBox}}
-
-
-
 
 %opening
 \title{An introductory guide to \pycle \\
@@ -139,28 +114,25 @@ The \pycle toolbox is a collection of several submodules:
 
 
 
-\section{A tutorial tour of \code{pycle}}
-We now explain the core features of \code{pycle}. I'll go over each of the submodules one by one and introduce, in a ``tutorial style'', the most important tools they provide. Our focus being on understanding, this section is neither concise nor exhaustive. %(however, section \ref{sec:documentation} is a methodical list of all the toolbox features). 
-\subsection{Sketching} 
-To use the \code{sketching} submodule, you first need to import it (to spare me some typing, I personally like tu use \code{sk} as shorthand). Usual sketching as defined in~\eqref{eq:sketching} can then be done by calling \code{sk.computeSketch} as follows.
+\section{A tutorial tour of \pycle}
+Let's explore the core submodules of \code{pycle}! Our focus here is understanding, so this section is a high-level tutorial rather than an exhaustive enumeration of what's inside the toolbox. %(however, section \ref{sec:documentation} is a methodical list of all the toolbox features). 
+
+\subsection{Sketching dataset with the \code{sketching.py} submodule} 
+To use the \code{sketching} submodule, you first need to import it (to spare me some typing, I personally like tu use \code{sk} as shorthand). Usual sketching as defined in~\eqref{eq:sketching} is simply done by calling \code{sk.computeSketch}. In practice it typically looks like this (we will fill in the dots later):
 \begin{lstlisting}
-import pycle.sketching as sk
+import pycle.sketching as sk # import the sketching submodule
 
 X = ...    # load a numpy array of dimension (n,d)
 Phi = ... # sketch feature map, see later
 
-z = sk.computeSketch(X,Phi)
+z = sk.computeSketch(X,Phi) # z is a numpy array containing the sketch
 \end{lstlisting}
 
-\noindent As you might have guessed, \code{sk.computeSketch(dataset,featureMap)} requires two arguments: the dataset $X$, and the feature map $\Phi$. Let's start with the simplest one: the dataset $X$ should be given as a 2d numpy array of dimensions $(n,d)$.
+\noindent As you might have guessed, \code{sk.computeSketch} requires two arguments: the dataset and the feature map. Let's start with the simplest one: the dataset $X$ should be given as a 2-d numpy array of dimensions $(n,d)$, i.e., number of examples times their dimension\footnote{\textbf{Matrix representation conventions:}
+We follow the same convention as most mainstream Python machine learning modules: the dataset, mathematically described as $X = (\Vec{x}_i \in \mathbb R^d)_{i = 1}^n \in \mathbb R^{d \times n}$, is represented by a numpy array of shape $(n,d)$. In particular, \code{X[0]} references $\Vec{x_1}$: note the awkward inversion of dimension order. For matrices that don't represent datasets (e.g., $\Omega$ in the examples below), we stick to the mathematical convention instead, i.e., a matrix of the type $\mathbb R^{a \times b}$ is represented by a numpy array of shape $(a,b)$.}.
 
-\note{\textbf{Matrix representation conventions}.
-We follow the same convention as most mainstream Python ML modules: the dataset, that we mathematically describe as $X = (\Vec{x}_i \in \mathbb R^d)_{i = 1}^n \in \mathbb R^{d \times n}$, is represented by a numpy array of shape $(n,d)$. In particular, \code{X[0]} references $\Vec{x_1}$: note the awkward inversion of dimension order. For matrices that don't represent datasets (e.g., $\Omega$ in the examples below), we stick to the mathematical convention instead, i.e., a matrix of the type $\mathbb R^{a \times b}$ is represented by a numpy array of shape $(a,b)$.}
-
-\noindent The feature map argument can be specified in one of the two following ways. Either---and this is the method I recommend---you give an instance of a \code{FeatureMap} object (explained below), or you directly provide a callable Python function (e.g., to compute the second-order moments for the sketch, write \code{Phi = lambda x: x**2}). Note that the second method is proposed for research purposes, in the case you want to construct a custom feature map that cannot be instantiated with the methods provided within the \code{FeatureMap} class.
-
-\note{\textbf{FeatureMap objects}.
-Why do we use \code{FeatureMap} objects instead of (Python) functions to represent... well, (mathematical) functions? Because we often require additional metadata/methods about $\Phi$ (e.g., target dimension $m$, jacobian $\nabla\Phi$,...). All these parameters and methods are conveniently packaged inside \code{FeatureMap} objects.}
+The feature map argument can be specified in one of the two following ways. Either---and this is the method I recommend---you give an instance of a \code{FeatureMap} object (explained below), or you directly provide a callable Python function (e.g., to compute the second-order moments for the sketch, write \code{Phi = lambda x: x**2}). Note that the second method is proposed for research purposes, in the case you want to construct a custom feature map that cannot be instantiated with the methods provided within the \code{FeatureMap} class\footnote{\textbf{FeatureMap objects:}
+Why do we use \code{FeatureMap} objects instead of (Python) functions to represent... well, (mathematical) functions? Because we often require additional metadata/methods about $\Phi$ (e.g., target dimension $m$, jacobian $\nabla\Phi$,...). All these parameters and methods are conveniently packaged inside \code{FeatureMap} objects.}.
 
 \emph{Voilà}, you know the basics of how the \code{sketching} submodule is used! Well, OK, all we saw was a function that computes an average, but hey, that's like, the essence of sketching, it's not my fault. Luckily for you, \code{sketching} has much more to offer. First and foremost, I'll demonstrate the whole zoo of feature maps that are readily available---I promise you, you'll construct your \code{FeatureMap} object $\Phi$ in no more than two lines of code. After this comes more advanced methods of the toolbox that you may not need right away: I'll show how to automatically select the \emph{scale hyper-parameter} in the aforementioned feature maps (which in practice can be hard to guess \emph{a priori}); I'll then finally explain \code{pycle}s functions for sketching with Differential Privacy guarantees. 
 
@@ -197,7 +169,7 @@ Moreover, the ``usual'' arguments for this simple feature map can be easily call
 
 % Privacy
 
-\subsection{Learning} 
+\subsection{Learning from the sketch with the \code{compressive\_learning.py} submodule} 
 
 \subsection{Utilities} 
 

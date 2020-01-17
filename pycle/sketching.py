@@ -290,6 +290,9 @@ def _universalQuantization(t,Delta=np.pi,centering=True):
     else:
         return ( (t // Delta) % 2 ) # centering=false => quantization is between 0 and +1
     
+def _universalQuantization_complex(t,Delta=np.pi,centering=True):
+    return _universalQuantization(t-Delta/2,Delta=Delta,centering=centering) + 1j*_universalQuantization(t-Delta,Delta=Delta,centering=centering)
+    
 def _sawtoothWave(t,T=2*np.pi,centering=True):
     if centering:
         return ( t % T )/T*2-1 
@@ -314,6 +317,7 @@ def _fourierSeriesEvaluate(t,coefficients,T=2*np.pi):
 _dico_nonlinearities = {
     "complexexponential":(_complexExponential,_complexExponential_grad),
     "universalquantization":(_universalQuantization,None),
+    "universalquantization_complex":(_universalQuantization_complex,None),
     "cosine": (lambda x: np.cos(x),lambda x: np.sin(x))
  }
 
@@ -497,7 +501,7 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
                 -- m: int, the sketch dimension
                 -- featureMapName: string, name of sketch feature function f, values supported:
                     -- 'complexExponential' (f(t) = exp(i*t))
-                    -- 'universalQuantization' (f(t) = sign(exp(i*t)))
+                    -- 'universalQuantization_complex' (f(t) = sign(exp(i*t)))
                 -- c_normalization: real, the constant before the sketch feature function (e.g., 1. (default), 1./sqrt(m),...)
         - n: int, number of sketch contributions being averaged (default = 1, useful to add noise on n independently)
         - DPdef: string, name of the Differential Privacy variant considered, i.e. the neighbouring relation ~:
@@ -535,7 +539,7 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
                 return np.sqrt(m)*(c_normalization/n)
             elif DPdef.lower() in ['replace','bdp']:
                 return np.sqrt(m)*np.sqrt(2)*(c_normalization/n)
-    elif featureMapName.lower() == 'universalquantization': # Assuming normalized in [-1,+1], TODO check real/complex case?
+    elif featureMapName.lower() == 'universalquantization_complex': # Assuming normalized in [-1,+1], TODO check real/complex case?
         if sensitivity_type == 1:
             if DPdef.lower() in ['remove','add','remove/add','standard','udp']:
                 return m*2*(c_normalization/n)
