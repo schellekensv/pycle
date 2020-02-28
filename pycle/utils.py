@@ -49,11 +49,11 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
     ## STEP 0: Parse input generation parameters
     # Default generation parameters
     _gen_params = {
-        'separation_scale': (8/np.sqrt(d)), # Separation of the Gaussians
-        'separation_min': 0, # Before norm
-        'covariance_variability_inter': 1., # between clusters
-        'covariance_variability_intra': 1., # inside one mode 
-        'all_covariance_scaling': 0.05} 
+        'separation_scale': (6/np.sqrt(d)), # Separation of the Gaussians
+        'separation_min': 3, # Before norm
+        'covariance_variability_inter': 0.5, # between clusters
+        'covariance_variability_intra': 0.5, # inside one mode 
+        'all_covariance_scaling': 0.15} 
     # Check the inputs, if it's a valid parameter overwrite it in the internal parameters dict "_gen_params"
     for param_name in generation_params:
         if param_name in _gen_params.keys():
