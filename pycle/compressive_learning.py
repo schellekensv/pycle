@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 import scipy
 from scipy.optimize import nnls, minimize
 
+# For debug
+import time
+
+
 # We rely on the sketching functions
 from .sketching import SimpleFeatureMap
     
@@ -13,7 +17,8 @@ from .sketching import SimpleFeatureMap
 ### 1: CL-OMPR for GMM ###
 ##########################
 
-def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1,GMMoutputFormat=True,verbose=0):
+## The CLOMPR algo itself
+def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1,GMMoutputFormat=True,ftol=1e-6,verbose=0):
     """Learns a Gaussian Mixture Model (GMM) from the complex exponential sketch of a dataset ("compressively").
     The sketch given in argument is asumed to be of the following form (x_i are examples in R^d):
         z = (1/n) * sum_{i = 1}^n exp(j*[Omega*x_i + xi]),
@@ -55,7 +60,7 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
         (d,m) = Omega.shape
         scst = 1. # This type of argument passing does't support different normalizations
     else:
-        raise ValueException('The featureMap argument does not match one of the supported formats.')
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
     
     ## 0.1.2) nb of iterations
     if nIterations is None:
@@ -72,7 +77,7 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
     boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
     varianceLowerBound = 1e-8
     for i in range(d): boundstheta.append([varianceLowerBound,None]) # bounds for the variance
-    
+    opt_method = 'L-BFGS-B' # also consider TNC
     
     ## 0.2) util functions to store the atoms easily
     def stacktheta(mu,sigma):
@@ -110,11 +115,11 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
     def gradMuSketchOfGaussian(mu,Sigma,Omega):
         '''returns a d-by-m-dimensional complex vector'''
         return scst*1j*Omega*sketchOfGaussian(mu,Sigma,Omega)
-    
+
     def gradSigmaSketchOfGaussian(mu,Sigma,Omega):
         '''returns a d-by-m-dimensional complex vector'''
         return -scst*0.5*(Omega**2)*sketchOfGaussian(mu,Sigma,Omega)
-    
+
     def Apth(th): # computes sketh from one atom th
         mu,sig = destacktheta(th)
         return sketchOfGaussian(mu,np.diag(sig),Omega)
@@ -167,17 +172,20 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
             grad[i*thetadim+d:(i+1)*thetadim] = -2*alpha[i]*np.real(jacobSi@np.conj(r)) # for sigma
         grad[-nbthetas:] = -2*np.real((z - A@alpha)@np.conj(A)) # Gradient of the weights
         return (fun,grad)
+
+    sketch_ri = np.r_[sketch.real, sketch.imag]
     
     ## THE ACTUAL ALGORITHM
     ####################################
     bestResidualNorm = np.inf 
-    bestTheta = None
-    bestalpha = None
+    bestTheta =  np.ones((K,2*d))
+    bestalpha = np.ones(K)/K
     for iRun in range(bestOfRuns):
     
         ## 1) Initialization
         r = sketch  # residual
         Theta = np.empty([0,2*d]) # Theta is a nbAtoms-by-atomDimension (= 2*d) array
+        A = np.empty([m,0]) # Contains the sketches of the atoms
 
         ## 2) Main optimization
         for i in range(nIterations):
@@ -186,51 +194,42 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
             mu0 = np.random.uniform(lowb,uppb) # initial mean at random
             sig0 = np.ones(d) # initial covariance matrix is identity TODO DO SOMETHING SMARTER?
             x0 = stacktheta(mu0,sig0)
-            # And solve            
-            sol = scipy.optimize.minimize(lambda th: step1funGrad(th,r), x0 = x0, args=(), method='L-BFGS-B', jac=True,
+            # And solve with LBFGS   
+            sol = scipy.optimize.minimize(lambda th: step1funGrad(th,r), x0 = x0, args=(), method=opt_method, jac=True,
                                             bounds=boundstheta, constraints=(), tol=None, options=None) # TODO change constrains?
             
             theta = sol.x
             ## 2.2] Step 2 : add it to the support
             Theta = np.append(Theta,[theta],axis=0)
+            A = np.c_[A,Apth(theta)] # Add a column to the A matrix
+
             ## 2.3] Step 3 : if necessary, hard-threshold to nforce sparsity
             if Theta.shape[0] > K:
-                # Construct A = sketchFeatureFunNorm(Theta); TODO avoid rebuilding everything
-                A = np.empty([m,0])
-                for theta_i in Theta:
-                    Apthi = Apth(theta_i)
-                    Apthi_norm = np.linalg.norm(Apthi)
-                    if Apthi_norm == 0: Apthi_norm = 1. # Avoid /0
-                    Apthi = Apthi / Apthi_norm # normalize, unlike step 4
-                    A = np.c_[A,Apthi] 
-                Ari = np.r_[A.real, A.imag]
-                b = sketch
-                bri = np.r_[b.real, b.imag] # todo : outside the loop
-                (beta,_) = nnls(Ari,bri) # non-negative least squares
-                Theta = np.delete(Theta, (np.argmin(beta)), axis=0)
+                norms = np.linalg.norm(A,axis=0)
+                norms[np.where(norms < 1e-15)[0]] = 1e-15 # Avoid /0
+                A_norm =  A/norms # normalize, unlike step 4
+                A_normri = np.r_[A_norm.real, A_norm.imag] 
+                (beta,_) = nnls(A_normri,sketch_ri) # non-negative least squares
+                index_to_delete = np.argmin(beta)
+                Theta = np.delete(Theta, index_to_delete, axis=0)
+                A = np.delete(A, index_to_delete, axis=1)
+                if index_to_delete == K:
+                    continue # No gain wrt previous iteration
+
             ## 2.4] Step 4 : project to find weights
-
-            # Construct A = sketchFeatureFunNorm(Theta); TODO avoid rebuilding everything
-            # TODO : avoid doing this if we did the computing at step 3?
-            A = np.empty([m,0])
-            for theta_i in Theta:
-                Apthi = Apth(theta_i)
-                A = np.c_[A,Apthi]
             Ari = np.r_[A.real, A.imag]
-            b = sketch
-            bri = np.r_[b.real, b.imag] # todo : outside the loop
-            (alpha,res) = nnls(Ari,bri) # non-negative least squares
-
+            (alpha,_) = nnls(Ari,sketch_ri) # non-negative least squares
             ## 2.5] Step 5
             # Initialize at current solution
             x0 = stackTheta(Theta,alpha)
             # Compute the bounds for step 5 : boundsOfOneAtom * numberAtoms then boundsOneWeight * numberAtoms
-            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[0,None]] * Theta.shape[0]
+            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-8,1]] * Theta.shape[0]
             # Solve
-            sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method='L-BFGS-B', jac=True,
-                                            bounds=boundsThetaAlpha, constraints=(), tol=None, options=None) # TODO ADD BOUNDS change constrains
+            sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method=opt_method, jac=True,
+                                            bounds=boundsThetaAlpha, constraints=(), options={'ftol': ftol}) # TODO ADD BOUNDS change constrains
             (Theta,alpha) = destackTheta(sol.x)
 
+            # The atoms have changed: we must re-compute A
             A = np.empty([m,0])
             for theta_i in Theta:
                 Apthi = Apth(theta_i)
@@ -238,13 +237,19 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
             r = sketch - A@alpha
 
         ## 3) Finalization
+        # Last optimization with the default (fine-grained) tolerance
+        if ftol >= 1e-8:
+            x0 = stackTheta(Theta,alpha)
+            sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method=opt_method, jac=True,
+                                        bounds=boundsThetaAlpha, constraints=()) 
+            (Theta,alpha) = destackTheta(sol.x)    
         # Normalize alpha
         alpha /= np.sum(alpha)
     
     
         runResidualNorm = np.linalg.norm(sketch - A@alpha)
         if verbose>1: print('Run {}, residual norm is {} (best: {})'.format(iRun,runResidualNorm,bestResidualNorm))
-        if runResidualNorm < bestResidualNorm:
+        if runResidualNorm <= bestResidualNorm:
             bestResidualNorm = runResidualNorm
             bestTheta = Theta
             bestalpha = alpha
@@ -310,7 +315,7 @@ def CLOMPR_CKM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns =
         (sketchFeatureFun,sketchFeatureGrad,d) = featureMap
         m = sketch.size
     else:
-        raise ValueException('The featureMap argument does not match one of the supported formats.')
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
         
     # Simplify in the case of normalized inputs
     if normalized: # If the sketch of an atom has always the same norm (e.g. in (Q)CKM)

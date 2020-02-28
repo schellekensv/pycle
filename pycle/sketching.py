@@ -68,25 +68,95 @@ def sampleFromPDF(pdf,x,nsamples=1):
 
     return sampleX
    
-def pdfAdaptedRadius(r):
+def pdfAdaptedRadius(r,KMeans=False):
     '''up to a constant'''
-    return np.sqrt(r**2 + (r**4)/4)*np.exp(-(r**2)/2) 
+    if KMeans:
+        return r*np.exp(-(r**2)/2)  # Dont take the gradient according to sigma into account
+    else:
+        return np.sqrt(r**2 + (r**4)/4)*np.exp(-(r**2)/2) 
 
-def drawFrequencies_AdaptedRadius(d,m,Sigma = None):
+def drawFrequencies_AdaptedRadius(d,m,Sigma = None,KMeans=False):
     '''draws frequencies according to some sampling pattern
     omega = R*Sigma^{-1/2}*phi, for R from adapted with variance 1, phi uniform''' 
     if Sigma is None:
-        Sigma = np.identity(n)
+        Sigma = np.identity(d)
         
     # Sample the radii
-    r = np.linspace(0,4,1001) # what are the best params? this seems reasonable
-    R = sampleFromPDF(pdfAdaptedRadius(r),r,nsamples=m)
+    r = np.linspace(0,5,2001) # what are the best params? this seems reasonable
+    R = sampleFromPDF(pdfAdaptedRadius(r,KMeans),r,nsamples=m)
     
     phi = np.random.randn(d,m)
     phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
     SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) # TO CHECK
     
     Om = SigFact@phi*R 
+    
+    return Om
+
+
+def pdf_diffOfGaussians(r,GMM_upper=None,GMM_lower=None):
+    """Here, GMM is given in terms of SD and not variance (change?)"""
+    if isinstance(GMM_upper,tuple):
+        (weights_upper,sigmas_upper) = GMM_upper
+    elif GMM_upper is None:
+        weights_upper = np.array([]) # Empty array
+    else:
+        (weights_upper,sigmas_upper) = (np.array([1.]),np.array([GMM_upper]))
+        
+    if isinstance(GMM_lower,tuple):
+        (weights_lower,sigmas_lower) = GMM_lower
+    elif GMM_lower is None:
+        weights_lower = np.array([])
+    else:
+        (weights_lower,sigmas_lower) = (np.array([1.]),np.array([GMM_lower]))
+        
+    res = np.zeros(r.shape)
+    # Add
+    for k in range(weights_upper.size):
+        res += weights_upper[k]*np.exp(-0.5*(r**2)/(sigmas_upper[k]**2))
+    # Substract
+    for k in range(weights_lower.size):
+        res -= weights_lower[k]*np.exp(-0.5*(r**2)/(sigmas_lower[k]**2))
+        
+    # Ensure pdf is positive
+    pdf_is_negative = res < 0
+    if any(pdf_is_negative):
+        print(res[:5])
+        # Print a warning if the negative pdf values are significant (not due to rounding errors)
+        tol = 1e-8
+        if np.max(np.abs(res[np.where(pdf_is_negative)[0]])) > tol:
+            print("WARNING: negative pdf values detected and replaced by zero, check the validity of your input")
+        # Correct the negative values
+        res[np.where(pdf_is_negative)[0]] = 0.
+
+    return res
+
+def drawFrequencies_diffOfGaussians(d,m,GMM_upper,GMM_lower=None,verbose=0):
+    '''draws frequencies according to some sampling pattern
+    omega = R*Sigma^{-1/2}*phi, TODO, phi uniform''' 
+    
+
+    # reasonable sampling
+    n_Rs = 1001
+    if isinstance(GMM_upper,tuple):
+        R_max = 4*np.max(GMM_upper[1]) # GMM_upper is (weights, cov)-type tuple
+    else:
+        R_max = 4*GMM_upper
+    r = np.linspace(0,R_max,n_Rs)
+    
+    if verbose > 0:
+        plt.plot(r,pdf_diffOfGaussians(r,GMM_upper,GMM_lower))
+        plt.xlabel('frequency norm r')
+        plt.ylabel('pdf(r)')
+        plt.show()
+    
+    # sample from the diff of gaussians pdf
+    R = sampleFromPDF(pdf_diffOfGaussians(r,GMM_upper,GMM_lower),r,nsamples=m)
+    
+    phi = np.random.randn(d,m)
+    phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
+    
+    Om = phi*R 
     
     return Om
 
@@ -101,25 +171,58 @@ def drawFrequencies(drawType,d,m,Sigma = None):
             -- "adaptedRadius"  or "AR" : Adapted Radius heuristic
         - d: int, dimension of the data to sketch
         - m: int, number of 'frequencies' to draw (the target sketch dimension)
-        - Sigma: (d,d)-numpy array, the covariance of the data (note that we typically use Sigma^{-1}).
+        - Sigma: is either:
+            -- (d,d)-numpy array, the covariance of the data (note that we typically use Sigma^{-1} in the frequency domain).
+            -- a tuple (w,cov) describing a scale mixture of Gaussians where,
+                -- w:  (K,)-numpy array, the weights of the scale mixture
+                -- cov: (K,d,d)-numpy array, the K different covariances in the mixture
+            -- None: same as Sigma = identity matrix (belongs to (d,d)-numpy array case)
                  If Sigma is None (default), we assume that data was normalized s.t. Sigma = identity.
         
     Returns:
         - Omega: (d,m)-numpy array containing the 'frequency' projection matrix
     """
-    if Sigma is None:
-        Sigma = np.identity(d)
+    # Parse drawType input
     if drawType.lower() in ["drawfrequencies_gaussian","gaussian","g"]:
         drawFunc = drawFrequencies_Gaussian
     elif drawType.lower() in ["drawfrequencies_foldedgaussian","foldedgaussian","folded_gaussian","fg"]:
-        drawFunc = drawFrequencies_Gaussian
+        drawFunc = drawFrequencies_FoldedGaussian
     elif drawType.lower() in ["drawfrequencies_adapted","adaptedradius","adapted_radius","ar"]:
         drawFunc = drawFrequencies_AdaptedRadius
-    return drawFunc(d,m,Sigma)
+    elif drawType.lower() in ["drawfrequencies_adapted_kmeans","adaptedradius_kmeans","adapted_radius_kmeans","arkm","ar-km"]:
+        drawFunc = lambda _a,_b,_c : drawFrequencies_AdaptedRadius(_a,_b,_c,KMeans=True)
+    else:
+        raise ValueError("drawType not recognized")
+
+    # Handle no input
+    if Sigma is None:
+        Sigma = np.identity(d)
+
+    # Handle 
+    if isinstance(Sigma,np.ndarray):
+        Omega = drawFunc(d,m,Sigma)
+
+    # Handle mixture-type input
+    elif isinstance(Sigma,tuple):
+        (w,cov) = Sigma # unpack
+        K = w.size
+        # Assign the frequencies to the mixture components
+        assignations = np.random.choice(K,m,p=w)
+        Omega = np.zeros((d,m))
+        for k in range(K):
+            active_index = (assignations == k)
+            if any(active_index):
+                Omega[:,np.where(active_index)[0]] = drawFunc(d,active_index.sum(),cov[k])
+
+    else:
+        raise ValueError("Sigma not recognized")
+
+    
+    return Omega
 
 # The following funtion allows to estimate Sigma
-def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
-    """Automatically estimates the "Sigma" parameter (the scale of data clusters) for generating the sketch operator.
+def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIterations=5,mode='max',verbose=0):
+    """Automatically estimates the "Sigma" parameter(s) (the scale of data clusters) for generating the sketch operator.
     
     We assume here that Sigma = sigma2_bar * identity matrix. 
     To estimate sigma2_bar, lightweight sketches of size m0 are generated from (a small subset of) the dataset
@@ -129,17 +232,28 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
     Arguments:
         - dataset: (n,d) numpy array, the dataset X: n examples in dimension d
         - m0: int, number of candidate 'frequencies' to draw (can be typically smaller than m).
+        - K:  int (default 1), number of scales to fit (if > 1 we fit a scale mixture)
         - c:  int (default 20), number of 'boxes' (i.e. number of maxima of sketch absolute values to fit)
         - n0: int or None, if given, n0 samples from the dataset are subsampled to be used for Sigma estimation
+        - drawType: a string indicating the sampling pattern (Lambda) to use in the pre-sketches, either:
+            -- "gaussian"       or "G"  : Gaussian sampling > Lambda = N(0,Sigma^{-1})
+            -- "foldedGaussian" or "FG" : Folded Gaussian sampling (i.e., the radius is Gaussian)
+            -- "adaptedRadius"  or "AR" : Adapted Radius heuristic
         - nIterations: int (default 5), the maximum number of iteration (typically stable after 2 iterations)
+        - mode: 'max' (default) or 'min', describe which sketch entries per block to fit
         - verbose: 0,1 or 2, amount of information to print (default: 0, no info printed). Useful for debugging.
         
-    Returns:
-        - Sigma: (d,d)-numpy array, the (diagonal) estimated covariance of the clusters in the dataset
+    Returns: If K = 1:
+                - Sigma: (d,d)-numpy array, the (diagonal) estimated covariance of the clusters in the dataset;
+             If K > 1: a tuple (w,Sigma) representing the scale mixture model, where:
+                - w:     (K,)-numpy array, the weigths of the scale mixture (sum to 1)
+                - Sigma: (K,d,d)-numpy array, the dxd covariances in the scale mixture
     """
     # TODOS:
-    # - allow K > 1
     # - estimate nonisotropic Sigma?
+
+    return_format_is_matrix = K is None
+    K = 1 if K is None else K
     
     (n,d) = dataset.shape
     # X is the subsampled dataset containing only n0 examples
@@ -147,12 +261,24 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
         X = dataset[np.random.choice(n,n0,replace=False)]
     else:
         X = dataset
+        
+    # Parse
+    if mode == 'max':
+        mode_criterion = np.argmax 
+    elif mode == 'min':
+        mode_criterion = np.argmin 
+    else:
+        raise ValueError("Unrecocgnized mode ({})".format(mode))
+
+    # Check if we dont overfit the empirical Fourier measurements
+    if (m0 < (K * 2)*c): 
+        print("WARNING: overfitting regime detected for frequency sampling fitting")
     
     # Initialization
-    sigma2_bar = 1
-    K = 1 # For later extension
+    #maxNorm = np.max(np.linalg.norm(X,axis=1)) 
+    sigma2_bar = np.random.uniform(0.3,1.6,K)
+    weights_bar = np.ones(K)/K
     s = m0//c # number of freqs per box
-    drawFreq_type = "AR" # To change? 
     
     # Optimization problem to fit a GMM curve to the data
     def _fun_grad_fit_sigmas(p,R,z):
@@ -186,16 +312,12 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
     # For normalization in the optimization problem
     def _callback(p):
         p[:K] /= np.sum(p[:K])
-    
-    # Bounds of the optimization problem
-    bounds = []
-    for k in range(K): bounds.append([1e-5,1]) # bounds for the weigths
-    for k in range(K): bounds.append([1e-12,1e12]) # bounds for the sigmas
 
     # Actual algorithm
     for i in range(nIterations):
         # Draw frequencies according to current estimate 
-        Omega0 = drawFrequencies(drawFreq_type,d,m0,Sigma = sigma2_bar*np.eye(d)) # To update K > 1
+        sigma2_bar_matrix = np.outer(sigma2_bar,np.eye(d)).reshape(K,d,d)  # covariances in (K,d,d) format
+        Omega0 = drawFrequencies(drawFreq_type,d,m0,Sigma = (weights_bar,sigma2_bar_matrix))
         
         # Sort the frequencies
         Rs = np.linalg.norm(Omega0,axis=0)
@@ -210,7 +332,7 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
         # find the indices of the max of each block
         jqs = np.empty(c) 
         for ic in range(c):
-            j_max = np.argmax(np.abs(z0)[ic*s:(ic+1)*s]) + ic*s
+            j_max = mode_criterion(np.abs(z0)[ic*s:(ic+1)*s]) + ic*s
             jqs[ic] = j_max
         jqs = jqs.astype(int)
         R_tofit = Rs[jqs]
@@ -229,21 +351,28 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
         f = lambda p: _fun_grad_fit_sigmas(p,R_tofit,z_tofit) # cost
         
         p0 = np.zeros(2*K) # initial point
-        p0[:K] = np.ones(K)/K # w
-        p0[K:] = np.random.uniform(0.5,1.5,K)/(np.median(R_tofit)**2) # sig2, heuristic to have good gradient at start
+        p0[:K] = weights_bar # w
+        p0[K:] = sigma2_bar 
+        #p0[K:] = np.random.uniform(0.5,1.5,K)/(np.median(R_tofit)**2) # sig2, heuristic to have good gradient at start
+        # TODO improve in the next iterates?
+
+        # Bounds of the optimization problem
+        bounds = []
+        for k in range(K): bounds.append([1e-5,1]) # bounds for the weigths
+        for k in range(K): bounds.append([5e-4*sigma2_bar[k],2e3*sigma2_bar[k]]) # bounds for the sigmas -> cant cange too much
     
         # Solve the sigma^2 optimization problem
         sol = scipy.optimize.minimize(f, p0,jac = True, bounds = bounds,callback=_callback)
         p = sol.x
-        w = np.array(p[:K])#/np.sum(p[:K])
-        sig2 = np.array(p[K:])
+        weights_bar = np.array(p[:K])/np.sum(p[:K])
+        sigma2_bar = np.array(p[K:])
         
         # Plot if required
         if verbose > 1:
             rfit = np.linspace(0,Rs.max(),100)
             zfit = np.zeros(rfit.shape)
             for k in range(K):
-                zfit += w[k]*np.exp(-(sig2[k]*rfit**2)/2.)
+                zfit += weights_bar[k]*np.exp(-(sigma2_bar[k]*rfit**2)/2.)
             plt.plot(Rs,np.abs(z0),'.')
             plt.plot(R_tofit,z_tofit,'.')
             plt.plot(rfit,zfit)
@@ -251,15 +380,14 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
             plt.ylabel('|z|')
             plt.show()
             
-        # Update
-        sigma2_bar = sig2[0]
+        
         
     # Show final fit
     if verbose > 0:
         rfit = np.linspace(0,Rs.max(),100)
         zfit = np.zeros(rfit.shape)
         for k in range(K):
-            zfit += w[k]*np.exp(-(sig2[k]*rfit**2)/2.)
+            zfit += weights_bar[k]*np.exp(-(sigma2_bar[k]*rfit**2)/2.)
         plt.plot(Rs,np.abs(z0),'.')
         plt.plot(R_tofit,z_tofit,'.')
         plt.plot(rfit,zfit)
@@ -269,7 +397,11 @@ def estimate_Sigma(dataset,m0,c=20,n0=None,nIterations=5,verbose=0):
         plt.show()
 
 
-    Sigma = sigma2_bar*np.eye(d)
+    if return_format_is_matrix:
+        Sigma = sigma2_bar[0]*np.eye(d)
+    else:
+        sigma2_bar_matrix = np.outer(sigma2_bar,np.eye(d)).reshape(K,d,d)  # covariances in (K,d,d) format        
+        Sigma = (weights_bar,sigma2_bar_matrix)
     
     return Sigma
 
@@ -419,7 +551,13 @@ class SimpleFeatureMap(FeatureMap):
         else:
             self.xi = xi
         # 4) extract the normalization constant
-        self.c_norm = c_norm
+        if isinstance(c_norm, str):
+            if c_norm.lower() in ['unit','normalized']:
+                self.c_norm = 1./np.sqrt(self.m)
+            else:
+                raise NotImplementedError("The provided c_norm name is not implemented.")
+        else:
+            self.c_norm = c_norm
         
     # magic operator to be able to call the FeatureMap object as a function
     def __call__(self,x): 
@@ -437,7 +575,7 @@ class SimpleFeatureMap(FeatureMap):
 #################################
 # 3.1 GENERAL SKETCHING ROUTINE #
 #################################
-def computeSketch(dataset, featureMap, datasetWeigths = None):
+def computeSketch(dataset, featureMap, datasetWeights = None):
     """
     Computes the sketch of a dataset given a generic feature map.
     
@@ -472,14 +610,14 @@ def computeSketch(dataset, featureMap, datasetWeigths = None):
             raise ValueError("Unexpected error while calling the sketch feature map:", sys.exc_info()[0])
     
     sketch = np.zeros(m)
-    if datasetWeigths is None:
+    if datasetWeights is None:
         for i in range(n):
             sketch = sketch + featureMap(dataset[i])/n
     else:
         # TODO: fix this commented implementation (crashes in certain cases, temporarily replaced by for loop)
-        # sketch = datasetWeigths@featureMap(X) 
+        # sketch = ddatasetWeights@featureMap(X) 
         for i in range(n):
-            sketch = sketch + featureMap(dataset[i])*datasetWeigths[i]
+            sketch = sketch + featureMap(dataset[i])*datasetWeights[i]
     return sketch
 
 #################################
@@ -525,7 +663,7 @@ def sensisitivty_sketch(featureMap,n = 1,DPdef = 'UDP',sensitivity_type = 1):
     elif (isinstance(featureMap,tuple)) and (len(featureMap) == 3):
         (m,featureMapName,c_normalization) = featureMap
     else:
-        raise ValueException('The featureMap argument does not match one of the supported formats.')
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
     
     # Sensitivity is given by S = c_featureMap * c_sensitivity_type * c_DPdef, check all three conditions (ughh)
     if featureMapName.lower() == 'complexexponential':
@@ -625,7 +763,7 @@ def computeSketch_DP(dataset, featureMap, epsilon, delta = 0,DPdef = 'UDP',useIm
             from .third_party import calibrateAnalyticGaussianMechanism
             sigma = calibrateAnalyticGaussianMechanism(epsilon_num, delta, S)
         else: # use usual bounds
-            if epsilon >= 1: raise Error('WARNING: with epsilon >= 1 the sigma bound doesn\'t hold! Privacy is NOT ensured!')
+            if epsilon >= 1: raise Exception('WARNING: with epsilon >= 1 the sigma bound doesn\'t hold! Privacy is NOT ensured!')
             sigma = np.sqrt(2*np.log(1.25/delta))*S/epsilon_num
         noise_num = np.random.normal(scale = sigma, size=m) + 1j*np.random.normal(scale = sigma, size=m) # TODO real
     else: 
@@ -644,6 +782,59 @@ def computeSketch_DP(dataset, featureMap, epsilon, delta = 0,DPdef = 'UDP',useIm
         return num/den
     
     
+
+## Useful: compute the sketch of a GMM
+def fourierSketchOfGaussian(mu,Sigma,Omega,xi=None,scst=None):
+    res = np.exp(1j*(mu@Omega) -np.einsum('ij,ij->i', np.dot(Omega.T, Sigma), Omega.T)/2.)
+    if xi is not None:
+        res = res*np.exp(1j*xi)
+    if scst is not None: # Sketch constant, eg 1/sqrt(m)
+        res = scst*res
+    return res
+
+
+def fourierSketchOfGMM(GMM,featureMap):
+    '''Returns the complex exponential sketch of a Gaussian Mixture Model
+    
+    Parameters
+    ----------
+    GMM: (weigths,means,covariances) tuple, the Gaussian Mixture Model, with
+        - weigths:     (K,)-numpy array containing the weigthing factors of the Gaussians
+        - means:       (K,d)-numpy array containing the means of the Gaussians
+        - covariances: (K,d,d)-numpy array containing the covariance matrices of the Gaussians
+    featureMap: the sketch the sketch featureMap (Phi), provided as either:
+        - a SimpleFeatureMap object (i.e., complex exponential or universal quantization periodic map)
+        - (Omega,xi): tuple with the (d,m) Fourier projection matrix and the (m,) dither (see above)
+        
+    Returns
+    -------
+    z: (m,)-numpy array containing the sketch of the provided GMM
+    '''
+    # Parse GMM input
+    (w,mus,Sigmas) = GMM
+    K = w.size
+
+    # Parse featureMap input
+    if isinstance(featureMap,SimpleFeatureMap):
+        Omega = featureMap.Omega
+        xi = featureMap.xi
+        d = featureMap.d
+        m = featureMap.m
+        scst = featureMap.c_norm # Sketch normalization constant, e.g. 1/sqrt(m)
+    elif isinstance(featureMap,tuple):
+        (Omega,xi) = featureMap
+        (d,m) = Omega.shape
+        scst = 1. # This type of argument passing does't support different normalizations
+    else:
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
+    
+    z = 1j*np.zeros(m)
+    for k in range(K):
+        z += fourierSketchOfGaussian(mus[k],Sigmas[k],Omega,xi,scst)
+    return z
+
+
+
 
 ### TODOS FOR SKETCHING.PY
 
