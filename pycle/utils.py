@@ -49,10 +49,10 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
     ## STEP 0: Parse input generation parameters
     # Default generation parameters
     _gen_params = {
-        'separation_scale': (6/np.sqrt(d)), # Separation of the Gaussians
-        'separation_min': 3, # Before norm
-        'covariance_variability_inter': 0.5, # between clusters
-        'covariance_variability_intra': 0.5, # inside one mode 
+        'separation_scale': (8/np.sqrt(d)), # Separation of the Gaussians
+        'separation_min': 0, # Before norm
+        'covariance_variability_inter': 1., # between clusters
+        'covariance_variability_intra': 1., # inside one mode 
         'all_covariance_scaling': 0.15} 
     # Check the inputs, if it's a valid parameter overwrite it in the internal parameters dict "_gen_params"
     for param_name in generation_params:
@@ -278,6 +278,42 @@ def generateSpiralDataset(n,normalize=None,return_density=False):
     if return_density:        
         return (X,pdf)
     return X
+
+
+
+def generatedataset_Ksparse(d,K,n,max_radius=1):
+    """
+    Generate a synthetic dataset of K-sparse vectors in dimension d, with l_2 norm <= max_radius.
+    
+    Parameters
+    ----------
+    d: int, the dataset dimension
+    K: int, the sparsity level (vectors have at most K nonzero entries)
+    n: int, the number of elements in the dataset (cardinality)
+    max_radius: real>0, vectors are drawn uniformy in the l_2 ball of radius max_radius
+        
+    Returns
+    -------
+    X: (n,d)-numpy array containing the samples
+    """
+
+    # Random points in a ball
+    r = max_radius*(np.random.uniform(0,1,size=n)**(1/K)) # Radius, sqrt for uniform density
+    v = np.random.randn(n,d) # Random direction
+    X = (v.T*(1/np.linalg.norm(v,axis=1))*r).T
+
+    # Random support (sets to zero the coefficients not in the support)
+    for i in range(n):
+        X[i,np.random.permutation(d)[K:]] = 0
+
+    return X
+
+
+
+
+
+
+
 
 
 ############################

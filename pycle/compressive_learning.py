@@ -3,205 +3,296 @@
 # Main imports
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy
 from scipy.optimize import nnls, minimize
+from copy import copy
 
 # For debug
 import time
 
-
 # We rely on the sketching functions
-from .sketching import SimpleFeatureMap
+from .sketching import SimpleFeatureMap, fourierSketchOfBox, fourierSketchOfGaussian
     
-##########################
-### 1: CL-OMPR for GMM ###
-##########################
 
-## The CLOMPR algo itself
-def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1,GMMoutputFormat=True,ftol=1e-6,verbose=0):
-    """Learns a Gaussian Mixture Model (GMM) from the complex exponential sketch of a dataset ("compressively").
-    The sketch given in argument is asumed to be of the following form (x_i are examples in R^d):
-        z = (1/n) * sum_{i = 1}^n exp(j*[Omega*x_i + xi]),
-    and the Gaussian Mixture to estimate will have a density given by (N is the usual Gaussian density):
-        P(x) = sum_{k=1}^K alpha_k * N(x;mu_k,Sigma_k)       s.t.      sum_k alpha_k = 1.
+## Utility functions to play with the atom representations
+# ========================================================
+def _stackAtom(task,*atom_elements):
+        '''Stacks all the elements of one atom (e.g., mean and diagonal variance of a Gaussian) into one atom vector'''
+        return np.append(*atom_elements)
+
+def _destackAtom(task,theta,d):
+    '''Splits one atom (e.g.,mean and diagonal variance of a Gaussian) into mean and variance separately'''
+    if task == "kmeans":
+        return theta
+    elif task == "gmm":
+        return (theta[:d],theta[-d:]) # mu = theta[:d], sigma = theta[-d:]
+    else:
+        raise ValueError
+
+def _stackTheta(task,Theta,alpha):
+    '''Stacks *all* the atoms and their weights into one vector'''
+    (nbthetas,thetadim) = Theta.shape
+    p = np.empty((thetadim+1)*nbthetas)
+    for i in range(nbthetas):
+        theta_i = Theta[i]
+        p[i*thetadim:(i+1)*thetadim] = theta_i
+    p[-nbthetas:] = alpha
+    return p
+
+def _destackTheta(task,p,d):
+    # Get thetadim, method-dependent
+    if task == "kmeans":
+        thetadim = d
+    elif task == "gmm":
+        thetadim = 2*d
+    else:
+        raise ValueError
+    nbthetas = int(p.size/(thetadim+1))
+    Theta = p[:thetadim*nbthetas].reshape(nbthetas,thetadim)
+    alpha = p[-nbthetas:]
+    return (Theta,alpha)
+
+def _ThetasToGMM(Th,al):
+    """util function, converts the output of CL-OMPR to a (weights,centers,covariances)-tuple (GMM encoding in this notebook)"""
+    (K,d2) = Th.shape
+    d = d2//2
+    clompr_mu = np.zeros([K,d])
+    clompr_sigma = np.zeros([K,d,d])
+    for k in range(K):
+        clompr_mu[k] = Th[k,0:d]
+        clompr_sigma[k] = np.diag(Th[k,d:2*d])
+    return (al/np.sum(al),clompr_mu,clompr_sigma)
+
+
+## Utility functions to compute the sketch of an atom and its jacobian
+# ====================================================================
+
+def _sketchAtom(task,Phi,theta,z_to_ignore):
+    """Compute the sketch for an atom theta (size m)"""
+    if task == "kmeans":
+        z_th = Phi(theta)
+    elif task == "gmm":
+        (mu,sig) = _destackAtom("gmm",theta,Phi.d)
+        z_th = fourierSketchOfGaussian(mu,np.diag(sig),Phi.Omega,Phi.xi,Phi.c_norm)
+    else:
+        raise ValueError
+    return z_th * z_to_ignore
+
+
+def _jacobian_sketchAtom(task,Phi,theta,z_to_ignore):
+    """Compute the jacobian of the sketch for an atom theta (size pxm)"""
+    if task == "kmeans":
+        grad_z_th = Phi.grad(theta)
+    elif task == "gmm":
+        (mu,sig) = _destackAtom("gmm",theta,Phi.d)
+        z_th = fourierSketchOfGaussian(mu,np.diag(sig),Phi.Omega,Phi.xi,Phi.c_norm)
+        grad_z_th = np.zeros((2*Phi.d,Phi.m)) + 1j*np.zeros((2*Phi.d,Phi.m))
+        grad_z_th[:Phi.d] = 1j*Phi.Omega * z_th # Jacobian w.r.t. mu
+        grad_z_th[Phi.d:] = -0.5*(Phi.Omega**2) * z_th # Jacobian w.r.t. sigma
+    else:
+        raise ValueError
+    return grad_z_th * z_to_ignore
+
+## Functions to optimize in the subproblems
+# =========================================
+def _CLOMPR_step1_fun_grad(task,Phi,theta,r,z_to_ignore,verbose=0):
+    """Computes the fun. value and grad. of step 1 objective: max_theta <A(P_theta),r> / <A(P_theta),A(P_theta)>"""
+    # Firstly, compute A(P_theta)...
+    Apth = _sketchAtom(task,Phi,theta,z_to_ignore)
+    # ... and its l2 norm
+    Apth_norm = np.linalg.norm(Apth)
+    # Trick to avoid division by zero (doesn't change anything because everything will be zero)
+    if np.isclose(Apth_norm,0):
+        if verbose > 1: print('ApthNrm is too small ({}), change it to 1e-6.'.format(Apth_norm))
+        Apth_norm = 1e-6
+
+    # We can evaluate the cost function
+    fun = -np.real(np.vdot(Apth,r))/Apth_norm # - to have a min problem
+
+    # Secondly, get the Jacobian
+    jacobian = _jacobian_sketchAtom(task,Phi,theta,z_to_ignore)
+    grad = -np.real(jacobian@np.conj(r))/(Apth_norm) + np.real(np.real(jacobian@Apth.conj())*(Apth@np.conj(r))/(Apth_norm**3) )
     
-    Arguments:
-        - sketch: (m,)-numpy array of complex reals, the sketch z of the dataset to learn from
-        - featureMap, the sketch the sketch featureMap (Phi), provided as either:
-            -- a SimpleFeatureMap object (i.e., complex exponential or universal quantization periodic map)
-            -- (Omega,xi): tuple with the (d,m) Fourier projection matrix and the (m,) dither (see above)
-        - K: int > 0, the number of Gaussians in the mixture to estimate
-        - bounds: (lowb,uppd), tuple of are (d,)-np arrays, lower and upper bounds for the centers of the Gaussians.
-                  By default (if bounds is None), the data is assumed to be normalized in the box [-1,1]^d.
-        - nIterations: int >= K, maximal number of iterations in CL-OMPR (default = 2*K).
-        - bestOfRuns: int (default 1). If >1 returns the solution with the smallest residual among that many independent runs.
-        - GMMoutputFormat: bool (defalut True), if False the output is not as described below but a list of atoms (for debug)
-        - verbose: 0,1 or 2, amount of information to print (default: 0, no info printed). Useful for debugging.
-        
-        
-    Returns: a tuple (w,mus,Sigmas) of three numpy arrays:
-        - alpha:  (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
-        - mus:    (K,d)  -numpy array containing the means of the Gaussians
-        - Sigmas: (K,d,d)-numpy array containing the covariance matrices of the Gaussians
+    return (fun,grad)
+
+def _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore):
+    """Computes the fun. value and grad. of step 1 objective: max_theta <A(P_theta),r> / <A(P_theta),A(P_theta)>"""
+    # Destack all the atoms
+    (Theta,alpha) = _destackTheta(task,p,Phi.d)
+    (nbthetas,thetadim) = Theta.shape
+
+    # Construct the A matrix
+    A = np.empty([Phi.m,0])
+    for theta_i in Theta:
+        Apthi = _sketchAtom(task,Phi,theta_i,z_to_ignore)
+        A = np.c_[A,Apthi]
+
+    # Residual
+    r = (sketch - A@alpha)
+
+    # Cost function
+    fun  = np.linalg.norm(r)**2
+
+    # Grad
+    grad = np.empty((thetadim+1)*nbthetas)
+    for i in range(nbthetas):
+        theta_i = Theta[i]
+        jacobian_i = _jacobian_sketchAtom(task,Phi,theta_i,z_to_ignore)
+        grad[i*thetadim:(i+1)*thetadim] = -2*alpha[i]*np.real(jacobian_i@np.conj(r)) # Gradient of the atoms
+    grad[-nbthetas:] = -2*np.real(r@np.conj(A)) # Gradient of the weights
+
+    return (fun,grad)
+
+
+
+
+## Main function for CLOMPR
+# =========================
+def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_per_dim=None,nIterations=None, nRepetitions=1, ftol=1e-6, verbose=0 ):
     """
-    
+    Generic CLOMPR (Compressive Learning with Orthogonal Matching Pursuit with Replacement) algorithm.
+    Implements two tasks from a sketch of the dataset: k-means and Gaussian Mixture Model estimation.
+
+    The sketch given in argument is asumed to be of the following form (x_i are the training examples in R^d):
+        z = (1/n) * sum_{i = 1}^n Phi(x_i),
+    where for GMM it is assumed that Phi = exp(j*[Omega*x_i + xi]), i.e. random Fourier features.
+    This sketched is to be "matched" to the sketch of the learned density A(P) = E_{x ~ P} Phi(x), which means:
+        - For k-means, P = P_centroids = sum_{k=1}^K alpha_k * delta(x - c_k) a mixture of Dirac deltas;
+        - For GMM, P = P_GMM = sum_{k=1}^K alpha_k * N(x;mu_k,Sigma_k);
+     in both cases the weigths are nonnegative and sum to one: alpha_k >= 0, sum_k alpha_k = 1.
+
+    Parameters
+    ----------
+    task: string, defines the task to solve: either "k-means" or "gmm".
+    sketch: (m,)-numpy array of complex reals, the sketch z of the dataset to learn from
+    featureMap: the sketching map Phi, provided as a FeatureMap object (must be a complex exponential map for GMM)
+    K: int > 0, the number of mixture components (centroids or Gaussians) to estimate
+    bounds: (2,d)-np array, lower and upper bounds for the data distribution.
+
+    Additional Parameters
+    ---------------------
+    nb_cat_per_dim: (d,)-array of ints, the number of categories per dimension for integer data,
+                    if its i-th entry = 0 (resp. > 0), dimension i is assumed to be continuous (resp. int.).
+                    By default all entries are assumed to be continuous.
+    dimensions_to_consider: array of ints (between 0 and d-1), [0,1,...d-1] by default.
+                    The box is restricted to the prescribed dimensions.
+                    This is helpful to solve problems on a subsets of all dimensions.
+    nIterations: int >= K, maximal number of iterations, if > K performs Replacement  (default = 2*K).
+    nRepetitions: int (default 1), if > 1 performs that many independent runs and returns the best solution found.
+    ftol: real > 0 (def. 1e-6), the tolerance in the optimization sub-problems (rougher tolerance significantly speeds up GMM).
+    verbose: 0,1 or 2, amount of information to print (default: 0, no info printed). Useful for debugging.
+
+    Returns
+    -------
+    A tuple of numpy arrays containing the solution. More specifically,
+    - For k-means: a tuple (alpha,centroids) of 2 arrays where
+        - alpha:     (K,) -numpy array containing the weigths ('mixing coefficients') of the centroids
+        - centroids: (K,d)-numpy array containing the centroids c_k of the clusters
+    - For GMM: a tuple (alpha,mus,Sigmas) of 3 arrays where
+        - alpha:  (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
+        - mus:    (K,d)  -numpy array containing the means mu_k of the Gaussians
+        - Sigmas: (K,d,d)-numpy array containing the covariance matrices Sigma_k of the Gaussians
+
+    """
+
     ## 0) Defining all the tools we need
     ####################################
     ## 0.1) Handle input
-    ## 0.1.1) sketch feature function
+
+    ## 0.1.1) task name
+    if task.lower() in ["km","ckm","kmeans","k-means"]:
+        task = "kmeans"
+    elif task.lower() in ["gmm","gaussian mixture model"]:
+        task = "gmm"
+    else:
+        raise ValueError('The task argument does not match one of the available options.')
+
+    ## 0.1.2) sketch feature function
     if isinstance(featureMap,SimpleFeatureMap):
-        Omega = featureMap.Omega
-        xi = featureMap.xi
-        d = featureMap.d
+        d_all = featureMap.d
         m = featureMap.m
-        scst = featureMap.c_norm # Sketch normalization constant, e.g. 1/sqrt(m)
-    elif isinstance(featureMap,tuple):
-        (Omega,xi) = featureMap
-        (d,m) = Omega.shape
-        scst = 1. # This type of argument passing does't support different normalizations
     else:
         raise ValueError('The featureMap argument does not match one of the supported formats.')
+
+    # Restrict the dimension
+    if dimensions_to_consider is None:
+        dimensions_to_consider = np.arange(d_all)
+    dimensions_to_ignore = np.delete(np.arange(d_all), dimensions_to_consider)
+    d = dimensions_to_consider.size
     
-    ## 0.1.2) nb of iterations
+    # Pre-compute sketch of unused dimensions
+    z_to_ignore = fourierSketchOfBox(bounds.T,featureMap,nb_cat_per_dim, dimensions_to_consider = dimensions_to_ignore)
+    # Compensate the normalization constant and the dithering which will be taken into account in the centroid sketch
+    z_to_ignore = z_to_ignore/(featureMap(np.zeros(d_all))) # giving zeros yields the dithering and the c_norm
+    
+    # Restrict the featureMap for the centroids
+    Phi = copy(featureMap) # Don't touch to the inital map, Phi is featureMap restricted to relevant dims
+    Phi.d = d
+    Phi.Omega = featureMap.Omega[dimensions_to_consider]
+    
+    ## 0.1.3) nb of iterations
     if nIterations is None:
         nIterations = 2*K # By default: CLOMP-*R* (repeat twice)
     
-    ## 0.1.3) Bounds of the optimization problems
+    ## 0.1.4) Bounds of the optimization problems
     if bounds is None:
         lowb = -np.ones(d) # by default data is assumed normalized
         uppb = +np.ones(d)
         if verbose > 0: print("WARNING: data is assumed to be normalized in [-1,+1]^d")
     else:
-        (lowb,uppb) = bounds # Bounds for one Gaussian center
+        lowb = bounds[0][dimensions_to_consider]
+        uppb = bounds[1][dimensions_to_consider] # Bounds for one centroid
+
     # Format the bounds for the optimization solver
-    boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
-    varianceLowerBound = 1e-8
-    for i in range(d): boundstheta.append([varianceLowerBound,None]) # bounds for the variance
-    opt_method = 'L-BFGS-B' # also consider TNC
-    
-    ## 0.2) util functions to store the atoms easily
-    def stacktheta(mu,sigma):
-        '''Stacks all the elements of one atom (mean and diagonal variance of a Gaussian) into one atom vector'''
-        return np.append(mu,sigma)
+    if task == "kmeans":
+        boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the centroids
+    elif task == "gmm":
+        boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
+        varianceLowerBound = 1e-8
+        for i in range(d): boundstheta.append([varianceLowerBound,(uppb[i]-lowb[i])**2]) # bounds for the variance
 
-    def destacktheta(th):
-        '''Splits one atom (mean and diagonal variance of a Gaussian) into mean and variance separately'''
-        mu = th[:d]
-        sigma = th[-d:]
-        return (mu,sigma)
-    
-    def stackTheta(Theta,alpha):
-        '''Stacks *all* the atoms and their weights into one vector'''
-        (nbthetas,thetadim) = Theta.shape
-        p = np.empty((thetadim+1)*nbthetas)
-        for i in range(nbthetas):
-            theta_i = Theta[i]
-            p[i*thetadim:(i+1)*thetadim] = theta_i
-        p[-nbthetas:] = alpha
-        return p
-
-    def destackTheta(p):
-        thetadim = 2*d # method-dependent
-        nbthetas = int(p.shape[0]/(thetadim+1))
-        Theta = p[:thetadim*nbthetas].reshape(nbthetas,thetadim)
-        alpha = p[-nbthetas:]
-        return (Theta,alpha)
-
-    ## 0.3) sketch of a Gaussian A(P_theta) and its gradient wrt theta
-    def sketchOfGaussian(mu,Sigma,Omega):
-        '''returns a m-dimensional complex vector'''
-        return scst*np.exp(1j*(mu@Omega) -np.einsum('ij,ij->i', np.dot(Omega.T, Sigma), Omega.T)/2.)*np.exp(1j*xi) # black voodoo magic to evaluate om_j^T*Sig*om_j forall j
-
-    def gradMuSketchOfGaussian(mu,Sigma,Omega):
-        '''returns a d-by-m-dimensional complex vector'''
-        return scst*1j*Omega*sketchOfGaussian(mu,Sigma,Omega)
-
-    def gradSigmaSketchOfGaussian(mu,Sigma,Omega):
-        '''returns a d-by-m-dimensional complex vector'''
-        return -scst*0.5*(Omega**2)*sketchOfGaussian(mu,Sigma,Omega)
-
-    def Apth(th): # computes sketh from one atom th
-        mu,sig = destacktheta(th)
-        return sketchOfGaussian(mu,np.diag(sig),Omega)
-
-
-    ## 0.4) functions that compute the cost and gradient of the optimization sub-problems
-    def step1funGrad(th,r): 
-        mu,sig = destacktheta(th)
-        Sig = np.diag(sig)
-        Apth = sketchOfGaussian(mu,Sig,Omega)
-        ApthNrm = np.linalg.norm(Apth)
-        jacobMu = gradMuSketchOfGaussian(mu,Sig,Omega)
-        jacobSi = gradSigmaSketchOfGaussian(mu,Sig,Omega)
-
-        # To avoid division by zero, trick (doesn't change anything because everything will be zero)
-        if np.isclose(ApthNrm,0):
-            if verbose > 1: print('ApthNrm is too small ({}), change it to 1e-5.'.format(ApthNrm))
-            ApthNrm = 1e-5
-        fun  = -np.real(np.vdot(Apth,r))/ApthNrm # - to have a min problem
-
-        #gradMu = -np.real(jacobMu@(np.eye(m) - np.outer(Apth,Apth)/(ApthNrm**2))@np.conj(r))/(ApthNrm) 
-        gradMu = -np.real(jacobMu@np.conj(r))/(ApthNrm) + np.real(np.real(jacobMu@Apth.conj())*(Apth@np.conj(r))/(ApthNrm**3) )
-        #gradSi = -np.real(jacobSi@(np.eye(m) - np.outer(Apth,Apth)/(ApthNrm**2))@np.conj(r))/(ApthNrm) 
-        gradSi = -np.real(jacobSi@np.conj(r))/(ApthNrm) + np.real(np.real(jacobSi@Apth.conj())*(Apth@np.conj(r))/(ApthNrm**3) )
-
-        grad = np.append(gradMu,gradSi)
-        return (fun,grad)
-    
-    def step5funGrad(p,z): 
-        (Theta,alpha) = destackTheta(p)
-        (nbthetas,thetadim) = Theta.shape 
-        # Compute atoms
-        A = np.empty([m,0])
-        for theta_i in Theta:
-            Apthi = Apth(theta_i)
-            A = np.c_[A,Apthi]
-            
-        r = (z - A@alpha) # to avoid re-computing
-        # Function
-        fun  = np.linalg.norm(r)**2
-        # Gradient
-        grad = np.empty((thetadim+1)*nbthetas)
-        for i in range(nbthetas):
-            theta_i = Theta[i]
-            mu,sig = destacktheta(theta_i)
-            Sig = np.diag(sig)
-            jacobMu = gradMuSketchOfGaussian(mu,Sig,Omega)
-            jacobSi = gradSigmaSketchOfGaussian(mu,Sig,Omega)
-            grad[i*thetadim:i*thetadim+d] = -2*alpha[i]*np.real(jacobMu@np.conj(r)) # for mu
-            grad[i*thetadim+d:(i+1)*thetadim] = -2*alpha[i]*np.real(jacobSi@np.conj(r)) # for sigma
-        grad[-nbthetas:] = -2*np.real((z - A@alpha)@np.conj(A)) # Gradient of the weights
-        return (fun,grad)
-
+    ## 0.1.5) Misc. initializations
+    # Chosen method for the optimization solver
+    opt_method = 'L-BFGS-B' # could also consider 'TNC'
+    # Separated real and imaginary part of the sketch
     sketch_ri = np.r_[sketch.real, sketch.imag]
-    
+    if task == "kmeans":
+        thetadim = d
+    elif task == "gmm":
+        thetadim = 2*d
+
+
     ## THE ACTUAL ALGORITHM
-    ####################################
+    #######################
     bestResidualNorm = np.inf 
-    bestTheta =  np.ones((K,2*d))
-    bestalpha = np.ones(K)/K
-    for iRun in range(bestOfRuns):
+    bestTheta =  None
+    bestalpha = None
+    for iRun in range(nRepetitions):
     
         ## 1) Initialization
         r = sketch  # residual
-        Theta = np.empty([0,2*d]) # Theta is a nbAtoms-by-atomDimension (= 2*d) array
+        Theta = np.empty([0,thetadim]) # Theta is a nbAtoms-by-atomDimension array
         A = np.empty([m,0]) # Contains the sketches of the atoms
 
         ## 2) Main optimization
         for i in range(nIterations):
             ## 2.1] Step 1 : find new atom theta most correlated with residual
             # Initialize the new atom
-            mu0 = np.random.uniform(lowb,uppb) # initial mean at random
-            sig0 = np.ones(d) # initial covariance matrix is identity TODO DO SOMETHING SMARTER?
-            x0 = stacktheta(mu0,sig0)
+            if task == "kmeans":
+                th_0 = np.random.uniform(lowb,uppb)
+            elif task == "gmm":
+                mu0 = np.random.uniform(lowb,uppb) # initial mean
+                sig0 = (10**np.random.uniform(-0.9,-0.2,d) * (uppb-lowb))**2 # initial covariances
+                th_0 = _stackAtom("gmm",mu0,sig0)
+
             # And solve with LBFGS   
-            sol = scipy.optimize.minimize(lambda th: step1funGrad(th,r), x0 = x0, args=(), method=opt_method, jac=True,
-                                            bounds=boundstheta, constraints=(), tol=None, options=None) # TODO change constrains?
-            
-            theta = sol.x
+            sol = minimize(lambda th: _CLOMPR_step1_fun_grad(task,Phi,th,r,z_to_ignore,verbose),
+                                            x0 = th_0, method=opt_method, jac=True,
+                                            bounds=boundstheta)
+            new_theta = sol.x
+
             ## 2.2] Step 2 : add it to the support
-            Theta = np.append(Theta,[theta],axis=0)
-            A = np.c_[A,Apth(theta)] # Add a column to the A matrix
+            Theta = np.append(Theta,[new_theta],axis=0)
+            A = np.c_[A,_sketchAtom(task,Phi,new_theta,z_to_ignore)] # Add a column to the A matrix
 
             ## 2.3] Step 3 : if necessary, hard-threshold to nforce sparsity
             if Theta.shape[0] > K:
@@ -214,35 +305,41 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
                 Theta = np.delete(Theta, index_to_delete, axis=0)
                 A = np.delete(A, index_to_delete, axis=1)
                 if index_to_delete == K:
-                    continue # No gain wrt previous iteration
+                    continue # No gain to be expected wrt previous iteration
 
             ## 2.4] Step 4 : project to find weights
             Ari = np.r_[A.real, A.imag]
             (alpha,_) = nnls(Ari,sketch_ri) # non-negative least squares
+
+
+
             ## 2.5] Step 5
-            # Initialize at current solution
-            x0 = stackTheta(Theta,alpha)
+            p0 = _stackTheta(task,Theta,alpha) # Initialize at current solution 
             # Compute the bounds for step 5 : boundsOfOneAtom * numberAtoms then boundsOneWeight * numberAtoms
-            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-8,1]] * Theta.shape[0]
+            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-9,1]] * Theta.shape[0]
             # Solve
-            sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method=opt_method, jac=True,
-                                            bounds=boundsThetaAlpha, constraints=(), options={'ftol': ftol}) # TODO ADD BOUNDS change constrains
-            (Theta,alpha) = destackTheta(sol.x)
+            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
+                                            x0 = p0, method=opt_method, jac=True,
+                                            bounds=boundsThetaAlpha, options={'ftol': ftol}) 
+            (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)
 
             # The atoms have changed: we must re-compute A
             A = np.empty([m,0])
             for theta_i in Theta:
-                Apthi = Apth(theta_i)
+                Apthi = _sketchAtom(task,Phi,theta_i,z_to_ignore)
                 A = np.c_[A,Apthi]
+            # Update residual
             r = sketch - A@alpha
 
         ## 3) Finalization
         # Last optimization with the default (fine-grained) tolerance
         if ftol >= 1e-8:
-            x0 = stackTheta(Theta,alpha)
-            sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method=opt_method, jac=True,
-                                        bounds=boundsThetaAlpha, constraints=()) 
-            (Theta,alpha) = destackTheta(sol.x)    
+            p0 = _stackTheta(task,Theta,alpha)
+            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
+                                            x0 = p0, method=opt_method, jac=True,
+                                            bounds=boundsThetaAlpha)  # Here ftol is much smaller
+            (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)    
+        
         # Normalize alpha
         alpha /= np.sum(alpha)
     
@@ -253,197 +350,21 @@ def CLOMPR_GMM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns=1
             bestResidualNorm = runResidualNorm
             bestTheta = Theta
             bestalpha = alpha
-            
+    
+    ## FORMAT OUTPUT
+    if task == "kmeans":
+        return (bestalpha,bestTheta)
+    elif task == "gmm":
+        return _ThetasToGMM(bestTheta,bestalpha)
 
-    if GMMoutputFormat:
-        return ThetasToGMM(bestTheta,bestalpha)
-    # Else return in "atomic" format
-    return (bestTheta,bestalpha)
-
-
-
-def ThetasToGMM(Th,al):
-    """util function, converts the output of CL-OMPR to a (weights,centers,covariances)-tuple (GMM encoding in this notebook)"""
-    (K,d2) = Th.shape
-    d = int(d2/2)
-    clompr_mu = np.zeros([K,d])
-    clompr_sigma = np.zeros([K,d,d])
-    for k in range(K):
-        clompr_mu[k] = Th[k,0:d]
-        clompr_sigma[k] = np.diag(Th[k,d:2*d])
-    return (al/np.sum(al),clompr_mu,clompr_sigma)
-
-##############################
-### 2: CL-OMPR for K-means ###
-##############################
-
-def CLOMPR_CKM(sketch,featureMap,K,bounds = None,nIterations = None,bestOfRuns = 1, verbose = 0):
-    """Learns a set of K centroids "compressively" from the provided sketch of a dataset.
-    The sketch given in argument is asumed to be of the following form (x_i are examples in R^d):
-        z = (1/n) * sum_{i = 1}^n Phi(x_i),
-    and will be "matched" to the sketch of the weighted centroids:
-        A(P_centroids) = sum_{k = 1}^K alpha_k * Phi(c_k).
-    
-    Arguments:
-        - sketch: (m,)-numpy array of complex reals, the sketch z of the dataset to learn from
-        - featureMap, the sketch the sketch featureMap (Phi), provided as either:
-            -- a FeatureMap object (i.e., complex exponential or universal quantization periodic map)
-            -- (fun,grad,d): tuple with the Phi function, its gradient, and the ambient dimension (deprecated, used for old code)
-        - K: int > 0, the number of Gaussians in the mixture to estimate
-        - bounds: (lowb,uppd), tuple of are (d,)-np arrays, lower and upper bounds for the centroids.
-                  By default (if bounds is None), the data is assumed to be normalized in the box [-1,1]^d.
-        - nIterations: int >= K, maximal number of iterations in CL-OMPR (default = 2*K).
-        - bestOfRuns: int (default 1) (NOT YET IMPLEMENTED, DOESN'T DO ANYTHING FOR NOW)
-        - verbose: 0,1 or 2, amount of information to print (default: 0, no info printed). Useful for debugging.
-        
-    Returns: a tuple (w,mus,Sigmas) of two numpy arrays:
-        - alpha:  (K,)   -numpy array containing the weigths ('mixing coefficients') of the clusters
-        - mus:    (K,d)  -numpy array containing the means of the Gaussians
-    """
-    ## 0) Defining all the tools we need
-    ####################################
-    ## 0.1) Handle input
-    ## 0.1.1) sketch feature function
-    normalized = False # Set to true when ||Phi(x)||_2 = cst. for all x (as e.g. complex exponential sketch)
-    if isinstance(featureMap,SimpleFeatureMap):
-        sketchFeatureFun = featureMap # or featureMap.__call__, should have same effect
-        sketchFeatureGrad = featureMap.grad
-        d = featureMap.d
-        m = featureMap.m
-        normalized = featureMap.name.lower() == "complexexponential"
-    elif isinstance(featureMap,tuple):
-        (sketchFeatureFun,sketchFeatureGrad,d) = featureMap
-        m = sketch.size
-    else:
-        raise ValueError('The featureMap argument does not match one of the supported formats.')
-        
-    # Simplify in the case of normalized inputs
-    if normalized: # If the sketch of an atom has always the same norm (e.g. in (Q)CKM)
-        sketchFeatureFunNorm  = sketchFeatureFun
-        sketchFeatureGradNorm = sketchFeatureGrad
-    else:
-        #sketchFeatureFunNorm = # TODO
-        #sketchFeatureGradNorm = # TODO
-        raise NotImplementedError 
-        
-    ## 0.1.2) nb of iterations
-    if nIterations is None:
-        nIterations = 2*K # By default: CLOMP-*R* (repeat twice)
-    
-    ## 0.1.3) Bounds of the optimization problems
-    if bounds is None:
-        lowb = -np.ones(d) # by default data is assumed normalized
-        uppb = +np.ones(d)
-        if verbose > 0: print("WARNING: data is assumed to be normalized in [-1,+1]^d")
-    else:
-        (lowb,uppb) = bounds # Bounds for one centroid
-    # Format the bounds for the optimization solver
-    bounds = np.array([lowb,uppb]).T.tolist()
-    
-    
-    ## 0.2) util functions to store the atoms easily
-    def stackTheta(Theta,alpha):
-        (K,d) = Theta.shape
-        p = np.empty((d+1)*K)
-        for i in range(K):
-            theta_i = Theta[i]
-            p[i*d:(i+1)*d] = theta_i
-        p[-K:] = alpha
-        return p
-
-    def destackTheta(p):
-        K = int(p.shape[0]/(d+1))
-        Theta = p[:d*K].reshape(K,d)
-        alpha = p[-K:]
-        return (Theta,alpha)
-    
-    ## 0.3) functions that compute the cost and gradient of the optimization sub-problems
-    def step1funGrad(c,r):
-        fun  = -np.real(np.vdot(sketchFeatureFunNorm(c),r)) # - to have a min problem
-        grad = -np.real(sketchFeatureGradNorm(c)@np.conj(r))
-        return (fun,grad)
-    
-    def step5funGrad(p,z):
-        (Theta,alpha) = destackTheta(p)
-        (K,d) = Theta.shape
-        # Compute atoms
-        A = np.empty([m,0])
-        for theta_i in Theta:
-            A = np.c_[A,sketchFeatureFun(theta_i)]
-        r = (z - A@alpha) # to avoid re-computing
-        # Function
-        fun  = np.linalg.norm(r)**2
-        # Gradient
-        grad = np.empty((d+1)*K)
-        for i in range(K):
-            theta_i = Theta[i]
-            grad[i*d:(i+1)*d] = -2*alpha[i]*np.real(sketchFeatureGrad(theta_i)@np.conj(r))
-        grad[-K:] = -2*np.real((z - A@alpha)@np.conj(A))
-        return (fun,grad)
-    
-    
-    ## 1) Initialization
-    r = sketch  # residual
-    Theta = np.empty([0,d]) # Theta is a nbAtoms-by-atomDimension array
-    
-    ## 2) Main optimization
-    for i in range(nIterations):
-        ## 2.1] Step 1 : find new atom theta most correlated with residual
-        x0 = np.random.uniform(lowb,uppb)
-        sol = scipy.optimize.minimize(lambda th: step1funGrad(th,r), x0 = x0, args=(), method='L-BFGS-B', jac=True,
-                                        bounds=bounds, constraints=(), tol=None, options=None) # change constrains
-        theta = sol.x
-        # TODO : fix bounds, constraints, x0, check args, opts, tol
-        ## 2.2] Step 2 : add it to the support
-        Theta = np.append(Theta,[theta],axis=0)
-        ## 2.3] Step 3 : if necessary, hard-threshold to nforce sparsity
-        if Theta.shape[0] > K:
-            # Construct A = sketchFeatureFunNorm(Theta); TODO avoid rebuilding everything
-            A = np.empty([m,0])
-            for theta_i in Theta:
-                A = np.c_[A,sketchFeatureFunNorm(theta_i)]
-            Ari = np.r_[A.real, A.imag]
-            b = sketch
-            bri = np.r_[b.real, b.imag] # todo : outside the loop
-            (beta,_) = nnls(Ari,bri) # non-negative least squares
-            Theta = np.delete(Theta, (np.argmin(beta)), axis=0)
-        ## 2.4] Step 4 : project to find weights
-        
-        # Construct A = sketchFeatureFunNorm(Theta); TODO avoid rebuilding everything
-        # TODO : avoid doing this if we did the computing at step 3?
-        A = np.empty([m,0])
-        for theta_i in Theta:
-            A = np.c_[A,sketchFeatureFun(theta_i)]
-        Ari = np.r_[A.real, A.imag]
-        b = sketch
-        bri = np.r_[b.real, b.imag] # todo : outside the loop
-        (alpha,res) = nnls(Ari,bri) # non-negative least squares
-        
-        ## 2.5] Step 5
-        x0 = stackTheta(Theta,alpha)
-        sol = scipy.optimize.minimize(lambda p: step5funGrad(p,sketch), x0 = x0, args=(), method='L-BFGS-B', jac=True,
-                                        bounds=None, constraints=(), tol=None, options=None) # TODO ADD BOUNDS change constrains
-        (Theta,alpha) = destackTheta(sol.x)
-        
-        A = np.empty([m,0])
-        for theta_i in Theta:
-            A = np.c_[A,sketchFeatureFun(theta_i)]
-        r = sketch - A@alpha
-    
-    ## 3) Finalization
-    # Normalize alpha
-    alpha /= np.sum(alpha)
-    return (alpha,Theta)
+    return None
 
 
 
 
 # TODO COMPRESSIVE_LEARNING in rough importance order
-# - implement CKM with normed Phi
-# - add bounds where they are still lacking
-# - support multiple runs in CKM
-# - smarter initialization of the covariance in CLOMPR-GMM
 # - add verbose that makes sense in both functions
-# - make code more efficient by avoiding re-computing the selected columns at each iteration (in both functions)
 # - support for nondiagonal covariances in the GMM fitting (how?? opt. on manifolds?)
 # - investigate if auto-differentiation might not be smarter
+
+

@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt # For verbose
 import scipy.optimize
 import sys          # For error handling
+from copy import copy
 
 NUMBA_INSTALLED = True
 try:
@@ -833,6 +834,81 @@ def fourierSketchOfGMM(GMM,featureMap):
         z += fourierSketchOfGaussian(mus[k],Sigmas[k],Omega,xi,scst)
     return z
 
+def fourierSketchOfBox(box,featureMap,nb_cat_per_dim=None, dimensions_to_consider=None):
+    '''Returns the complex exponential sketch of the indicator function on a parallellipiped (box).
+    For dimensions that flagged as integer, considers the indicator on a set of integers instead.
+    
+    Parameters
+    ----------
+    box: (d,2)-numpy array, the boundaries of the box (x in R^d is in the box iff box[i,0] <= x_i <= box[i,1])
+    featureMap: the sketch the sketch featureMap (Phi), provided as either:
+        - a SimpleFeatureMap object (is assumed to use the complex exponential map)
+        - (Omega,xi): tuple with the (d,m) Fourier projection matrix and the (m,) dither (see above)
+
+    Additional Parameters
+    ---------------------
+    nb_cat_per_dim: (d,)-array of ints, the number of categories per dimension for integer data,
+                    if its i-th entry = 0 (resp. > 0), dimension i is assumed to be continuous (resp. int.).
+                    By default all entries are assumed to be continuous.
+    dimensions_to_consider: array of ints (between 0 and d-1), [0,1,...d-1] by default.
+                    The box is restricted to the prescribed dimensions.
+                    This is helpful to solve problems on a subsets of all dimensions.
+
+        
+    Returns
+    -------
+    z: (m,)-numpy array containing the sketch of the indicator function on the provided box
+    '''
+    ## Parse input
+    # Parse box input
+    (d,_) = box.shape
+    c_box = (box[:,1]+box[:,0])/2 # Center of the box in each dimension
+    l_box = (box[:,1]-box[:,0])/2 # Length (well, half of the length) of the box in each dimension
+    
+    # Parse featureMap input
+    if isinstance(featureMap,SimpleFeatureMap):
+        Omega = featureMap.Omega
+        xi = featureMap.xi
+        d = featureMap.d
+        m = featureMap.m
+        scst = featureMap.c_norm # Sketch normalization constant, e.g. 1/sqrt(m)
+    elif isinstance(featureMap,tuple):
+        (Omega,xi) = featureMap
+        (d,m) = Omega.shape
+        scst = 1. # This type of argument passing does't support different normalizations
+    else:
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
+
+    # Parse nb_cat_per_dim
+    if nb_cat_per_dim is None:
+        nb_cat_per_dim = np.zeros(d)
+
+    # Parse dimensions to consider
+    if dimensions_to_consider is None:
+        dimensions_to_consider = np.arange(d)
+
+     ## Compute sketch
+    z = scst*np.exp(1j*xi)
+    for i in dimensions_to_consider:
+        mask_valid = np.abs(Omega[i]) > 1e-15
+        # CHECK IF INTEGER OR CONTINUOUS
+        if nb_cat_per_dim[i] > 0:
+            low_int  = box[i,0] 
+            high_int = box[i,1] + 1 # python counting convention
+            C = high_int - low_int
+            newTerm = np.ones(m) + 1j*np.zeros(m)
+            newTerm[mask_valid] = (1/C)*(np.exp(1j*Omega[i,mask_valid]*high_int)-np.exp(1j*Omega[i,mask_valid]*low_int))/(np.exp(1j*Omega[i,mask_valid])-1)
+            z *= newTerm
+        else:
+            # If continuous
+            # To avoid divide by zero error, use that lim x->0 sin(a*x)/x = a
+            sincTerm = np.zeros(m)
+            
+            sincTerm[mask_valid] = np.sin(Omega[i,mask_valid]*l_box[i])/Omega[i,mask_valid]
+            sincTerm[~mask_valid] = l_box[i] 
+
+            z *= 2*np.exp(1j*Omega[i]*c_box[i])*sincTerm
+    return z
 
 
 
