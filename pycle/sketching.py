@@ -161,8 +161,9 @@ def drawFrequencies_diffOfGaussians(d,m,GMM_upper,GMM_lower=None,verbose=0):
     
     return Om
 
+
 # General function for convenience
-def drawFrequencies(drawType,d,m,Sigma = None):
+def drawFrequencies(drawType,d,m,Sigma = None,nb_cat_per_dim=None):
     """Draw the 'frequencies' or projection matrix Omega for sketching.
     
     Arguments:
@@ -179,6 +180,11 @@ def drawFrequencies(drawType,d,m,Sigma = None):
                 -- cov: (K,d,d)-numpy array, the K different covariances in the mixture
             -- None: same as Sigma = identity matrix (belongs to (d,d)-numpy array case)
                  If Sigma is None (default), we assume that data was normalized s.t. Sigma = identity.
+        - nb_cat_per_dim: (d,)-array of ints, the number of categories per dimension for integer data,
+                    if its i-th entry = 0 (resp. > 0), dimension i is assumed to be continuous (resp. int.).
+                    By default all entries are assumed to be continuous. Frequencies for int data is drawn as follows:
+                    1. Chose one dimension among the categorical ones, set Omega along all others to zero
+                    2. For the chosen dimension with C categories, we draw its component omega ~ U({0,...,C-1}) * 2*pi/C 
         
     Returns:
         - Omega: (d,m)-numpy array containing the 'frequency' projection matrix
@@ -215,8 +221,27 @@ def drawFrequencies(drawType,d,m,Sigma = None):
             if any(active_index):
                 Omega[:,np.where(active_index)[0]] = drawFunc(d,active_index.sum(),cov[k])
 
+    elif (isinstance(Sigma,float) or isinstance(Sigma,int)) and Sigma > 0:
+        Omega = drawFunc(d,m,Sigma*np.eye(d))
+    
     else:
         raise ValueError("Sigma not recognized")
+
+    # If needed, overwrite the integer entries
+    if nb_cat_per_dim is not None:
+        intg_index = np.nonzero(nb_cat_per_dim)[0]
+        d_intg = np.size(intg_index)
+
+        Omega_intg = np.zeros((d_intg,m))
+        for intgdim_localindex,intg_globalindex in enumerate(intg_index):
+            C = nb_cat_per_dim[intg_globalindex]
+            Omega_intg[intgdim_localindex,:] = (2*np.pi/C)*np.random.randint(0,C,(1,m))
+        # Mask
+        masks_pool = np.eye(d_intg)
+        masks = masks_pool[np.random.choice(d_intg,m)].T
+        Omega_intg = Omega_intg*masks
+
+        Omega[intg_index] = Omega_intg
 
     
     return Omega
@@ -568,6 +593,9 @@ class SimpleFeatureMap(FeatureMap):
         """Gradient (Jacobian matrix) of Phi, as a (d,m)-numpy array"""
         return self.c_norm*self.f_grad(np.dot(self.Omega.T,x) + self.xi)*self.Omega
     
+
+
+
 
 #######################################
 ### 3: Actual sketching functions   ###

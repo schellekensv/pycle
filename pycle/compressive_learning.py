@@ -3,7 +3,7 @@
 # Main imports
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import nnls, minimize
+from scipy.optimize import nnls, minimize, LinearConstraint
 from copy import copy
 
 # For debug
@@ -11,7 +11,12 @@ import time
 
 # We rely on the sketching functions
 from .sketching import SimpleFeatureMap, fourierSketchOfBox, fourierSketchOfGaussian
-    
+
+
+###############
+## 1: CLOMPR ##
+###############
+
 
 ## Utility functions to play with the atom representations
 # ========================================================
@@ -163,7 +168,7 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
     Parameters
     ----------
     task: string, defines the task to solve: either "k-means" or "gmm".
-    sketch: (m,)-numpy array of complex reals, the sketch z of the dataset to learn from
+    sketch: (m,)-numpy array of complex values, the sketch z of the dataset to learn from
     featureMap: the sketching map Phi, provided as a FeatureMap object (must be a complex exponential map for GMM)
     K: int > 0, the number of mixture components (centroids or Gaussians) to estimate
     bounds: (2,d)-np array, lower and upper bounds for the data distribution.
@@ -281,7 +286,7 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
                 th_0 = np.random.uniform(lowb,uppb)
             elif task == "gmm":
                 mu0 = np.random.uniform(lowb,uppb) # initial mean
-                sig0 = (10**np.random.uniform(-0.9,-0.2,d) * (uppb-lowb))**2 # initial covariances
+                sig0 = (10**np.random.uniform(-0.8,-0.1,d) * (uppb-lowb))**2 # initial covariances
                 th_0 = _stackAtom("gmm",mu0,sig0)
 
             # And solve with LBFGS   
@@ -316,7 +321,7 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
             ## 2.5] Step 5
             p0 = _stackTheta(task,Theta,alpha) # Initialize at current solution 
             # Compute the bounds for step 5 : boundsOfOneAtom * numberAtoms then boundsOneWeight * numberAtoms
-            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-9,1]] * Theta.shape[0]
+            boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-9,2]] * Theta.shape[0]
             # Solve
             sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
                                             x0 = p0, method=opt_method, jac=True,
@@ -368,3 +373,208 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
 # - investigate if auto-differentiation might not be smarter
 
 
+###################
+## 2: Histograms ##
+###################
+
+## Utility function: project on the probability simplex
+# =====================================================
+def project_probabilitySimplex(h):
+    """Returns h projected onto {h_i>=0, sum_i h_i = 1}. Algo from https://arxiv.org/abs/1309.1541."""
+    d = h.shape[0]
+    hsort = np.sort(h)[::-1] # Step 1: reverse sort
+    rho = np.sum(hsort + (1-np.cumsum(hsort))/np.arange(1,d+1)>0) # Step 2: nb active components
+    lambd = (1/rho)*(1 - hsort[:rho].sum()) # Step 3: lambda parameter
+    return np.maximum(h + lambd,np.zeros(d))
+
+## Method 1: using the MMD distance
+# =================================
+
+def CL_histogram_MMD(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=10,
+                     project_on_probabilitySimplex=True,reg_max_alpha=5):
+    """
+    Computes a histogram from the fourier sketch by minimizing the approximated MMD between data and histogram.
+    
+    Parameters
+    ----------
+    sketch: (m,)-numpy array of complex values, the sketch z of the dataset to learn from
+    Phi: SimpleFeatureMap object from pycle.sketching (the map used for sketching), must be a Fourier sketch (complex exp.)
+    domain: (d,2)-numpy array, boundaries of the box-like domain (x in R^d is in the box iff box[i,0] <= x_i <= box[i,1])
+    dimension: int (0<=axis<d), dimension along which the histogram is constructed
+
+    Additional Parameters
+    ---------------------
+    nb_cat_per_dim: (d,)-array of ints, the number of categories per dimension for integer data,
+                    if its i-th entry = 0 (resp. > 0), dimension i is assumed to be continuous (resp. int.).
+                    By default all entries are assumed to be continuous.
+    bins_cont: int (>1, default 10), number of bins in the histogram, only used if the target dimension is continuous-valued
+                    i.e., if nb_cat_per_dim[dimension] == 0
+    
+    Returns
+    -------
+    h: (bins,)-numpy array, the histogram values computed from the sketch
+    """
+    ## 0) Parsing the inputs
+    # Number of categorical inputs
+    if nb_cat_per_dim is None:
+        nb_cat_per_dim = np.zeros(Phi.d)
+    
+    is_integer_dimension = False
+    if nb_cat_per_dim[dimension] > 0:
+        # The data is integer-type
+        is_integer_dimension = True
+        bins = int(nb_cat_per_dim[dimension])
+    else:
+        bins = bins_cont
+
+    m = sketch.size
+    # 1) Construct the A matrix
+    A = 1j*np.zeros((m,bins)) # Pre-allocation
+    bin_edges = np.linspace(domain[dimension,0],domain[dimension,1],bins+1)
+    box = domain.copy()
+    for p in range(bins):
+        # move to the next box
+        if is_integer_dimension:
+            box[dimension,0] = p
+            box[dimension,1] = p
+        else:
+            box[dimension,0] = bin_edges[p]
+            box[dimension,1] = bin_edges[p+1]
+        A[:,p] = fourierSketchOfBox(box,Phi,nb_cat_per_dim) 
+        
+    # 1.b) cast to real 
+    Ari = np.r_[A.real, A.imag]
+    
+    # 2) create b vector
+    b = np.r_[sketch.real, sketch.imag]
+    
+    # 3) solve the optimization problem
+    def _f_grad(x):
+        r = Ari@x-b
+        f = 0.5*np.linalg.norm(r)**2
+        grad = Ari.T@r
+        return (f,grad)
+    
+    # Starting point
+    x0 = np.ones(bins)/bins
+    # Linear constraints
+    A_constr = np.zeros((bins,bins))
+    l_constr = 0*np.ones(bins) # Positive constraints
+    A_constr[:bins,:bins] = np.eye(bins)
+    upper_bound = reg_max_alpha # weird that it must be large
+    u_constr = upper_bound*np.ones(bins) # Sum-to one constraints
+    constr = LinearConstraint(A_constr,l_constr,u_constr)
+
+    # Solve
+    sol = minimize(_f_grad, x0, method='trust-constr', bounds=None, constraints=constr, jac=True, options={'verbose': 0})
+
+    if project_on_probabilitySimplex:
+        return project_probabilitySimplex(sol.x)
+    else:
+        return sol.x/np.sum(sol.x)
+
+## TO UPDATE TO ALLOW INTEGER ENTRIES
+def histogramFromSketch_M2M(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=10,project_on_probabilitySimplex=True,reg_rho=0.01):
+    """
+    Computes a histogram from the sketch with the M2M method.
+    (Uses the closed-form solution of M2Ms learning stage, with MSE loss).
+    
+    Parameters
+    ----------
+    sketch: (m,)-numpy array of complex values, the sketch z of the dataset to learn from
+    Phi: SimpleFeatureMap object from pycle.sketching (the map used for sketching), must be a Fourier sketch (complex exp.)
+    domain: (d,2)-numpy array, boundaries of the box-like domain (x in R^d is in the box iff box[i,0] <= x_i <= box[i,1])
+    dimension: int (0<=axis<d), dimension along which the histogram is constructed
+
+    Additional Parameters
+    ---------------------
+    nb_cat_per_dim: (d,)-array of ints, the number of categories per dimension for integer data,
+                    if its i-th entry = 0 (resp. > 0), dimension i is assumed to be continuous (resp. int.).
+                    By default all entries are assumed to be continuous.
+    bins_cont: int (>1, default 10), number of bins in the histogram, only used if the target dimension is continuous-valued
+                    i.e., if nb_cat_per_dim[dimension] == 0
+    reg_rho: real  (>=0, default 0.01): regularization parameter (larger reg_rho entails more regularization)
+    
+    Returns
+    -------
+    h: (bins,)-numpy array, the histogram values computed from the sketch
+    """
+
+    ## 0) Parsing the inputs
+
+    # Number of categorical inputs
+    if nb_cat_per_dim is None:
+        nb_cat_per_dim = np.zeros(Phi.d)
+
+    is_integer_dimension = False
+    if nb_cat_per_dim[dimension] > 0:
+        # The data is integer-type
+        is_integer_dimension = True
+        bins = int(nb_cat_per_dim[dimension])
+    else:
+        bins = bins_cont
+
+    # Parse m, d
+    if isinstance(Phi,SimpleFeatureMap):
+        Omega = Phi.Omega
+        d = Phi.d
+        m = Phi.m
+    else:
+        raise ValueError('The Phi argument does not match one of the supported formats.')
+    
+    ## 1) Construct the A matrix
+    # Build a new sketch with all the difference of Omega
+    Omega_diffs = np.empty((d,m**2))
+    for i in range(m):
+        for j in range(m):
+            Omega_diffs[:,i*m+j] = Omega[:,i] - Omega[:,j]
+
+    Phi_diffs = SimpleFeatureMap("complexExponential", Omega_diffs,xi=np.zeros(m**2),c_norm=Phi.c_norm)
+
+    # Evaluate the box constraints Fourier transform thanks to this sketch function
+    z_diffs_domain = fourierSketchOfBox(domain,Phi_diffs,nb_cat_per_dim)
+
+    # And reshape (not sure if correct)
+    A_compl = z_diffs_domain.reshape(m,m)
+
+    # Stack real and imaginary components
+    A = np.zeros((2*m,2*m))
+    A[:m,:m] = A_compl.real
+    A[:m,m:] = A_compl.imag
+    A[m:,:m] = -A_compl.imag
+    A[m:,m:] = A_compl.real
+    
+    # Regularize
+    A += reg_rho*np.eye(2*m)
+
+    box = domain.copy() # the box in which we do the learning
+    bin_edges = np.linspace(domain[dimension,0],domain[dimension,1],bins+1)
+    h = np.zeros(bins)
+    for p in range(bins):
+        # move to the next box
+        if is_integer_dimension:
+            box[dimension,0] = p
+            box[dimension,1] = p
+        else:
+            box[dimension,0] = bin_edges[p]
+            box[dimension,1] = bin_edges[p+1]
+        F = fourierSketchOfBox(box,Phi,nb_cat_per_dim)
+
+        # Stack the b vector
+        b = np.zeros(2*m)
+        b[:m] = F.real
+        b[m:] = -F.imag
+
+        
+        # ... and solve! 
+        a_ri = np.linalg.solve(A, b)
+        a = a_ri[:m] + 1j*a_ri[m:]
+        
+
+        
+        # Predict with the sketch
+        #print(a)
+        h[p] = np.real(np.dot(a,sketch))
+    if project_on_probabilitySimplex:
+        h = project_probabilitySimplex(h)
+    return h
