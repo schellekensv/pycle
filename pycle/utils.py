@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # DATASET GENERATION TOOLS #
 ############################
 
-def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=None,**generation_params):
+def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=None,grid_aligned=True,**generation_params):
     """
     Generate a synthetic dataset according to a Gaussian Mixture Model distribution.
     
@@ -28,6 +28,8 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
     normalize: string (default=None), if not None describes how to normalize the dataset. Available options:
             - 'l_2-unit-ball': the dataset is scaled in the l_2 unit ball (i.e., all l_2 norms are <= 1)
             - 'l_inf-unit-ball': the dataset is projected in the l_inf unit ball (i.e., all entries are <= 1)
+    grid_aligned: bool (default = True), if True the covariances of the GMM modes are diagonal 
+    
     
         
     Returns
@@ -49,7 +51,7 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
     ## STEP 0: Parse input generation parameters
     # Default generation parameters
     _gen_params = {
-        'separation_scale': (8/np.sqrt(d)), # Separation of the Gaussians
+        'separation_scale': (10/np.sqrt(d)), # Separation of the Gaussians
         'separation_min': 0, # Before norm
         'covariance_variability_inter': 1., # between clusters
         'covariance_variability_intra': 1., # inside one mode 
@@ -104,6 +106,12 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
         scale_variance_this_mode *= _gen_params['all_covariance_scaling'] # take into account global scaling
         unscaled_variances_this_mode = 10**(np.random.uniform(0,_gen_params['covariance_variability_intra'],d)) 
         Sigma_this_mode = scale_variance_this_mode*np.diag(unscaled_variances_this_mode)
+        
+        # Rotate if necessary
+        # (https://math.stackexchange.com/questions/442418/random-generation-of-rotation-matrices)
+        if not grid_aligned:
+            rotate_matrix,_ = np.linalg.qr(np.random.randn(d,d))
+            Sigma_this_mode = rotate_matrix@Sigma_this_mode@rotate_matrix.T
         
         # Save the mean and covariance
         means[k] = mu_this_mode
@@ -320,13 +328,18 @@ def generatedataset_Ksparse(d,K,n,max_radius=1):
 #         METHODS          #
 ############################
 
-def EM_GMM(X,K,max_iter = 20):
+def EM_GMM(X, K, max_iter=20, nRepetitions=1):
     """Usual Expectation-Maximization (EM) algorithm for fitting mixture of Gaussian models (GMM).
     
-    Arguments:
-        - X: (n,d)-numpy array, the dataset of n examples in dimension d
-        - K: int, the number of Gaussian modes
-        - max_iter: int, the number of EM iterations to perform
+    Parameters
+    ----------
+    X: (n,d)-numpy array, the dataset of n examples in dimension d
+    K: int, the number of Gaussian modes
+    
+    Additional Parameters
+    ---------------------
+    max_iter: int (default 20), the number of EM iterations to perform
+    nRepetitions: int (default 1), number of independent EM runs to perform (returns the best)
         
     Returns: a tuple (w,mus,Sigmas) of three numpy arrays
         - w:      (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
@@ -341,39 +354,51 @@ def EM_GMM(X,K,max_iter = 20):
     lowb = np.amin(X,axis=0)
     uppb = np.amax(X,axis=0)
     
-    # Initializations
-    w = np.ones(K)
-    mus = np.empty((K,d))
-    Sigmas = np.empty((K,d,d)) # Covariances are initialized as random diagonal covariances, with folded Gaussian values
-    for k in range(K):
-        mus[k] = np.random.uniform(lowb,uppb)
-        Sigmas[k] = np.diag(np.abs(np.random.randn(d)))
-    r = np.empty((n,K)) # Matrix of posterior probabilities, here memory allocation only
-
-    # Main loop
-    for i in range(max_iter):
-        # E step
+    
+    bestGMM = None
+    bestScore = -np.inf
+    
+    
+    for rep in range(nRepetitions):
+        # Initializations
+        w = np.ones(K)
+        mus = np.empty((K,d))
+        Sigmas = np.empty((K,d,d)) # Covariances are initialized as random diagonal covariances, with folded Gaussian values
         for k in range(K):
-            r[:,k] = w[k]*scipy.stats.multivariate_normal.pdf(X, mean=mus[k], cov=Sigmas[k],allow_singular=True)
-        r = (r.T/np.sum(r,axis=1)).T # Normalize (the posterior probabilities sum to 1). Dirty :-(
+            mus[k] = np.random.uniform(lowb,uppb)
+            Sigmas[k] = np.diag(np.abs(np.random.randn(d)))
+        r = np.empty((n,K)) # Matrix of posterior probabilities, here memory allocation only
 
-        # M step: 1) update w
-        w = np.sum(r,axis=0)/n 
+        # Main loop
+        for i in range(max_iter):
+            # E step
+            for k in range(K):
+                r[:,k] = w[k]*scipy.stats.multivariate_normal.pdf(X, mean=mus[k], cov=Sigmas[k],allow_singular=True)
+            r = (r.T/np.sum(r,axis=1)).T # Normalize (the posterior probabilities sum to 1). Dirty :-(
 
-        # M step: 2) update centers
-        for k in range(K):
-            mus[k] = r[:,k]@X/np.sum(r[:,k])
+            # M step: 1) update w
+            w = np.sum(r,axis=0)/n 
 
-        # M step: 3) update Sigmas
-        for k in range(K):
-            # Dumb implementation
-            num = np.zeros((d,d))
-            for i in range(n):
-                num += r[i,k]*np.outer(X[i]-mus[k],X[i]-mus[k])
-            Sigmas[k] = num/np.sum(r[:,k])
+            # M step: 2) update centers
+            for k in range(K):
+                mus[k] = r[:,k]@X/np.sum(r[:,k])
 
-        # (end of one EM iteration)
-    return (w,mus,Sigmas)
+            # M step: 3) update Sigmas
+            for k in range(K):
+                # Dumb implementation
+                num = np.zeros((d,d))
+                for i in range(n):
+                    num += r[i,k]*np.outer(X[i]-mus[k],X[i]-mus[k])
+                Sigmas[k] = num/np.sum(r[:,k])
+
+            # (end of one EM iteration)
+        # (end of one EM run)
+        newGMM = (w,mus,Sigmas)
+        newScore = loglikelihood_GMM(newGMM,X)
+        if newScore > bestScore:
+            bestGMM = newGMM
+            bestScore = newScore
+    return bestGMM
 
 
 ############################
@@ -527,12 +552,20 @@ def plotGMM(X=None,P=None,dims=(0,1),d=2,proportionInGMM = None):
 
     for k in range(K):
         mu = mus[k]
-        sigma_sol = np.diag(Sigmas[k])
+        # Compute eigenvalues
+        (lam,v) = np.linalg.eig(Sigmas[k][[dim0,dim1],:][:,[dim0,dim1]])
+        # Sort
+        v_max = v[:,np.argmax(lam)]
+
         plt.scatter(mu[dim0],mu[dim1],s=200*w[k],c='r')
 
-        wEll = cst*np.sqrt(sigma_sol[dim0])
-        hEll = cst*np.sqrt(sigma_sol[dim1])
-        ellipse = Ellipse(xy=mu, width=wEll, height=hEll, angle = 0,
+        wEll = cst*np.sqrt(lam.max())
+        hEll = cst*np.sqrt(lam.min())
+        if np.abs(v_max[0]) >= np.abs(v_max[1])*1e-9:
+            angle = np.arctan(v_max[1]/v_max[0])*180/(np.pi)
+        else:
+            angle = 0
+        ellipse = Ellipse(xy=mu, width=wEll, height=hEll, angle = angle,
                                 edgecolor='r', fc='None', lw=2)
         ax.add_patch(ellipse)
 

@@ -476,7 +476,7 @@ _dico_nonlinearities = {
     "complexexponential":(_complexExponential,_complexExponential_grad),
     "universalquantization":(_universalQuantization,None),
     "universalquantization_complex":(_universalQuantization_complex,None),
-    "cosine": (lambda x: np.cos(x),lambda x: np.sin(x))
+    "cosine": (lambda x: np.cos(x),lambda x: -np.sin(x))
  }
 
 # 2.2: in development, use numba to speed up sketching: 
@@ -587,13 +587,12 @@ class SimpleFeatureMap(FeatureMap):
         
     # magic operator to be able to call the FeatureMap object as a function
     def __call__(self,x): 
-        return self.c_norm*self.f(np.dot(self.Omega.T,x) + self.xi) # Evaluate the feature map at x
+        return self.c_norm*self.f(np.matmul(self.Omega.T,x.T).T + self.xi) # Evaluate the feature map at x
     
     def grad(self,x):
         """Gradient (Jacobian matrix) of Phi, as a (d,m)-numpy array"""
-        return self.c_norm*self.f_grad(np.dot(self.Omega.T,x) + self.xi)*self.Omega
+        return self.c_norm*self.f_grad(np.matmul(self.Omega.T,x.T).T + self.xi)*self.Omega
     
-
 
 
 
@@ -604,7 +603,7 @@ class SimpleFeatureMap(FeatureMap):
 #################################
 # 3.1 GENERAL SKETCHING ROUTINE #
 #################################
-def computeSketch(dataset, featureMap, datasetWeights = None):
+def computeSketch(dataset, featureMap, datasetWeights = None, batch_size = None):
     """
     Computes the sketch of a dataset given a generic feature map.
     
@@ -639,14 +638,19 @@ def computeSketch(dataset, featureMap, datasetWeights = None):
             raise ValueError("Unexpected error while calling the sketch feature map:", sys.exc_info()[0])
     
     sketch = np.zeros(m)
+    
+    # Split the batches
+    if batch_size is None:
+        batch_size = int(1e6/m) # Rough heuristic, best batch size will vary on different machines
+    nb_batches = int(np.ceil(n/batch_size))
+        
+    
     if datasetWeights is None:
-        for i in range(n):
-            sketch = sketch + featureMap(dataset[i])/n
+        for b in range(nb_batches):
+            sketch = sketch + featureMap(dataset[b*batch_size:(b+1)*batch_size]).sum(axis=0)
+        sketch /= n
     else:
-        # TODO: fix this commented implementation (crashes in certain cases, temporarily replaced by for loop)
-        # sketch = ddatasetWeights@featureMap(X) 
-        for i in range(n):
-            sketch = sketch + featureMap(dataset[i])*datasetWeights[i]
+        sketch = datasetWeights@featureMap(X) 
     return sketch
 
 #################################

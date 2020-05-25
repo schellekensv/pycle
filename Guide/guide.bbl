@@ -5,4 +5,24 @@ R.~Gribonval, G.~Blanchard, N.~Keriven, and Y.~Traonmilin, ``Compressive
   statistical learning with random feature moments,'' {\em arXiv preprint
   arXiv:1706.07180}, 2017.
 
+\bibitem{schellekens2018quantized}
+V.~Schellekens and L.~Jacques, ``Quantized compressive k-means,'' {\em IEEE
+  Signal Processing Letters}, vol.~25, no.~8, pp.~1211--1215, 2018.
+
+\bibitem{keriven2018sketching}
+N.~Keriven, A.~Bourrier, R.~Gribonval, and P.~P{\'e}rez, ``Sketching for
+  large-scale learning of mixture models,'' {\em Information and Inference: A
+  Journal of the IMA}, vol.~7, no.~3, pp.~447--508, 2018.
+
+\bibitem{keriven2017compressive2}
+N.~Keriven, N.~Tremblay, Y.~Traonmilin, and R.~Gribonval, ``Compressive
+  k-means,'' in {\em 2017 IEEE International Conference on Acoustics, Speech
+  and Signal Processing (ICASSP)}, pp.~6369--6373, IEEE, 2017.
+
+\bibitem{schellekens2019differentially}
+V.~Schellekens, A.~Chatalic, F.~Houssiau, Y.-A. de~Montjoye, L.~Jacques, and
+  R.~Gribonval, ``Differentially private compressive k-means,'' in {\em ICASSP
+  2019-2019 IEEE International Conference on Acoustics, Speech and Signal
+  Processing (ICASSP)}, pp.~7933--7937, IEEE, 2019.
+
 \end{thebibliography}

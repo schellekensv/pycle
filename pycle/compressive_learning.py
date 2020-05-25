@@ -21,8 +21,11 @@ from .sketching import SimpleFeatureMap, fourierSketchOfBox, fourierSketchOfGaus
 ## Utility functions to play with the atom representations
 # ========================================================
 def _stackAtom(task,*atom_elements):
-        '''Stacks all the elements of one atom (e.g., mean and diagonal variance of a Gaussian) into one atom vector'''
-        return np.append(*atom_elements)
+    '''Stacks all the elements of one atom (e.g., mean and diagonal variance of a Gaussian) into one atom vector'''
+    res = []
+    for a in atom_elements:
+        res = np.append(res,a)
+    return res
 
 def _destackAtom(task,theta,d):
     '''Splits one atom (e.g.,mean and diagonal variance of a Gaussian) into mean and variance separately'''
@@ -30,6 +33,8 @@ def _destackAtom(task,theta,d):
         return theta
     elif task == "gmm":
         return (theta[:d],theta[-d:]) # mu = theta[:d], sigma = theta[-d:]
+    elif task == "gmm-nondiag":
+        return (theta[:d],theta[d:].reshape(d,d)) # mu = theta[:d], Sigma = theta[-d:]
     else:
         raise ValueError
 
@@ -49,6 +54,8 @@ def _destackTheta(task,p,d):
         thetadim = d
     elif task == "gmm":
         thetadim = 2*d
+    elif task == "gmm-nondiag":
+        thetadim = (d+1)*d
     else:
         raise ValueError
     nbthetas = int(p.size/(thetadim+1))
@@ -56,15 +63,23 @@ def _destackTheta(task,p,d):
     alpha = p[-nbthetas:]
     return (Theta,alpha)
 
-def _ThetasToGMM(Th,al):
+def _ThetasToGMM(task,Th,al):
     """util function, converts the output of CL-OMPR to a (weights,centers,covariances)-tuple (GMM encoding in this notebook)"""
     (K,d2) = Th.shape
-    d = d2//2
+    if task == "gmm":
+        d = d2//2
+    elif task == "gmm-nondiag":
+        d = int(-0.5 + np.sqrt(0.25 + d2))
+    else:
+        raise NotImplementedError
     clompr_mu = np.zeros([K,d])
     clompr_sigma = np.zeros([K,d,d])
     for k in range(K):
         clompr_mu[k] = Th[k,0:d]
-        clompr_sigma[k] = np.diag(Th[k,d:2*d])
+        if task == "gmm":
+            clompr_sigma[k] = np.diag(Th[k,d:2*d])
+        elif task == "gmm-nondiag":
+            clompr_sigma[k] = Th[k,d:].reshape(d,d)
     return (al/np.sum(al),clompr_mu,clompr_sigma)
 
 
@@ -78,6 +93,9 @@ def _sketchAtom(task,Phi,theta,z_to_ignore):
     elif task == "gmm":
         (mu,sig) = _destackAtom("gmm",theta,Phi.d)
         z_th = fourierSketchOfGaussian(mu,np.diag(sig),Phi.Omega,Phi.xi,Phi.c_norm)
+    elif task == "gmm-nondiag":
+        (mu,Sig) = _destackAtom("gmm-nondiag",theta,Phi.d)
+        z_th = fourierSketchOfGaussian(mu,Sig,Phi.Omega,Phi.xi,Phi.c_norm)
     else:
         raise ValueError
     return z_th * z_to_ignore
@@ -93,6 +111,15 @@ def _jacobian_sketchAtom(task,Phi,theta,z_to_ignore):
         grad_z_th = np.zeros((2*Phi.d,Phi.m)) + 1j*np.zeros((2*Phi.d,Phi.m))
         grad_z_th[:Phi.d] = 1j*Phi.Omega * z_th # Jacobian w.r.t. mu
         grad_z_th[Phi.d:] = -0.5*(Phi.Omega**2) * z_th # Jacobian w.r.t. sigma
+    elif task == "gmm-nondiag":
+        (mu,Sig) = _destackAtom("gmm-nondiag",theta,Phi.d)
+        z_th = fourierSketchOfGaussian(mu,Sig,Phi.Omega,Phi.xi,Phi.c_norm)
+        grad_z_th = (1+1j)*np.zeros(((Phi.d+1)*Phi.d,Phi.m))
+        grad_z_th[:Phi.d] = 1j*Phi.Omega * z_th # Jacobian w.r.t. mu
+        for j in range(Phi.m):
+            omega2 = -(np.outer(Phi.Omega[:,j],Phi.Omega[:,j]))
+            omega2 = omega2 * (np.ones((Phi.d,Phi.d)) - 0.5*np.eye(Phi.d))
+            grad_z_th[Phi.d:,j] = np.reshape(omega2,-1) * z_th[j] # Jacobian w.r.t. sigma
     else:
         raise ValueError
     return grad_z_th * z_to_ignore
@@ -148,6 +175,15 @@ def _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore):
     return (fun,grad)
 
 
+def _makeGMMfeasible(theta,d):
+    
+    (mu,Sig) = _destackAtom("gmm-nondiag",theta,d)
+        
+    (L,U) = np.linalg.eig(Sig)
+    L = L - min(0,L.min())
+    Sig = U@np.diag(L)@U.T
+    
+    return _stackAtom("gmm-nondiag",mu,Sig)
 
 
 ## Main function for CLOMPR
@@ -167,7 +203,7 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
 
     Parameters
     ----------
-    task: string, defines the task to solve: either "k-means" or "gmm".
+    task: string, defines the task to solve: either "k-means", "gmm" (diagonal covariances) or "gmm-nondiag" (general case).
     sketch: (m,)-numpy array of complex values, the sketch z of the dataset to learn from
     featureMap: the sketching map Phi, provided as a FeatureMap object (must be a complex exponential map for GMM)
     K: int > 0, the number of mixture components (centroids or Gaussians) to estimate
@@ -206,8 +242,13 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
     ## 0.1.1) task name
     if task.lower() in ["km","ckm","kmeans","k-means"]:
         task = "kmeans"
+        task_finetuning = "kmeans"
     elif task.lower() in ["gmm","gaussian mixture model"]:
         task = "gmm"
+        task_finetuning = "gmm"
+    elif task.lower() in ["gmm-nondiag"]:
+        task = "gmm"
+        task_finetuning = "gmm-nondiag"
     else:
         raise ValueError('The task argument does not match one of the available options.')
 
@@ -248,12 +289,30 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
         uppb = bounds[1][dimensions_to_consider] # Bounds for one centroid
 
     # Format the bounds for the optimization solver
-    if task == "kmeans":
+    if task_finetuning == "kmeans":
         boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the centroids
-    elif task == "gmm":
+    elif task_finetuning == "gmm":
         boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
         varianceLowerBound = 1e-8
         for i in range(d): boundstheta.append([varianceLowerBound,(uppb[i]-lowb[i])**2]) # bounds for the variance
+    elif task_finetuning == "gmm-nondiag":
+        # Usual bounds of GMM
+        boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
+        varianceLowerBound = 1e-8
+        for i in range(d): boundstheta.append([varianceLowerBound,(uppb[i]-lowb[i])**2]) # bounds for the variance
+        
+        # Bounds for the nondiagonal problem
+        boundstheta_finetuning = np.array([lowb,uppb]).T.tolist()  # bounds for the means
+        varianceLowerBound = 1e-8
+        varianceUpperBound = ((uppb-lowb).max()/2)**2
+
+        _lowb_var = -varianceUpperBound*np.ones((d,d))
+        np.fill_diagonal(_lowb_var, varianceLowerBound)
+        _uppb_var = +varianceUpperBound*np.ones((d,d))
+
+        _boundsvar = np.append(_lowb_var.reshape(-1),_uppb_var.reshape(-1)).reshape(2,d**2).T.tolist()
+        for _i in _boundsvar: boundstheta_finetuning.append(_i) # bounds for the variance
+    
 
     ## 0.1.5) Misc. initializations
     # Chosen method for the optimization solver
@@ -264,6 +323,8 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
         thetadim = d
     elif task == "gmm":
         thetadim = 2*d
+    elif task == "gmm-nondiag":
+        thetadim = d*(d+1)
 
 
     ## THE ACTUAL ALGORITHM
@@ -288,12 +349,28 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
                 mu0 = np.random.uniform(lowb,uppb) # initial mean
                 sig0 = (10**np.random.uniform(-0.8,-0.1,d) * (uppb-lowb))**2 # initial covariances
                 th_0 = _stackAtom("gmm",mu0,sig0)
+                
+            elif task == "gmm-nondiag":
+                # Solve once for diagonal
+                mu0 = np.random.uniform(lowb,uppb) # initial mean
+                sig0 = (10**np.random.uniform(-0.8,-0.1,d) * (uppb-lowb))**2 # initial covariances
+                th_0 = _stackAtom("gmm",mu0,sig0)
+                sol = minimize(lambda th: _CLOMPR_step1_fun_grad("gmm",Phi,th,r,z_to_ignore,verbose),
+                                            x0 = th_0, method=opt_method, jac=True,
+                                            bounds=boundstheta_gmm)
+
+                (mu0,sig0) = _destackAtom("gmm",sol.x,d)
+
+                th_0 = _stackAtom("gmm-nondiag",mu0,np.diag(sig0))
 
             # And solve with LBFGS   
             sol = minimize(lambda th: _CLOMPR_step1_fun_grad(task,Phi,th,r,z_to_ignore,verbose),
                                             x0 = th_0, method=opt_method, jac=True,
                                             bounds=boundstheta)
             new_theta = sol.x
+            
+            if task == "gmm-nondiag":
+                new_theta = _makeGMMfeasible(new_theta,d)
 
             ## 2.2] Step 2 : add it to the support
             Theta = np.append(Theta,[new_theta],axis=0)
@@ -327,6 +404,11 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
                                             x0 = p0, method=opt_method, jac=True,
                                             bounds=boundsThetaAlpha, options={'ftol': ftol}) 
             (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)
+            
+            # Make covariances feasible
+            if task == "gmm-nondiag":
+                for k in range(Theta.shape[0]):
+                    Theta[k] = _makeGMMfeasible(Theta[k],d)
 
             # The atoms have changed: we must re-compute A
             A = np.empty([m,0])
@@ -336,14 +418,27 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
             # Update residual
             r = sketch - A@alpha
 
-        ## 3) Finalization
+        ## 3) Finalization boundstheta_finetuning
         # Last optimization with the default (fine-grained) tolerance
-        if ftol >= 1e-8:
-            p0 = _stackTheta(task,Theta,alpha)
-            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
+        if task_finetuning == "gmm-nondiag":
+            if verbose > 0: print('finetuning')
+            Theta_new = np.zeros((K,d*(d+1))) # Expand to have full cov matrix
+            for k in range(K):
+                (mu,sig2) = _destackAtom("gmm",Theta[k],d)
+                # put current sol on the diagonal of full covariance matrix
+                Theta_new[k] = _stackAtom("gmm-nondiag",mu,np.diag(sig2))
+            Theta = Theta_new # overwrite
+            
+            boundsThetaAlpha = boundstheta_finetuning * Theta.shape[0] + [[1e-9,2]] * Theta.shape[0]
+            
+        if task_finetuning == "gmm-nondiag" or ftol >= 1e-8:
+            p0 = _stackTheta(task_finetuning,Theta,alpha)
+            
+            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task_finetuning,Phi,p,sketch,z_to_ignore),
                                             x0 = p0, method=opt_method, jac=True,
                                             bounds=boundsThetaAlpha)  # Here ftol is much smaller
-            (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)    
+            (Theta,alpha) = _destackTheta(task_finetuning,sol.x,Phi.d)    
+        
         
         # Normalize alpha
         alpha /= np.sum(alpha)
@@ -359,8 +454,8 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
     ## FORMAT OUTPUT
     if task == "kmeans":
         return (bestalpha,bestTheta)
-    elif task == "gmm":
-        return _ThetasToGMM(bestTheta,bestalpha)
+    elif task == "gmm" or task == "gmm-nondiag":
+        return _ThetasToGMM(task_finetuning,bestTheta,bestalpha)
 
     return None
 
@@ -390,8 +485,7 @@ def project_probabilitySimplex(h):
 ## Method 1: using the MMD distance
 # =================================
 
-def CL_histogram_MMD(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=10,
-                     project_on_probabilitySimplex=True,reg_max_alpha=5):
+def CL_histogram_MMD(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=10):
     """
     Computes a histogram from the fourier sketch by minimizing the approximated MMD between data and histogram.
     
@@ -461,17 +555,14 @@ def CL_histogram_MMD(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=1
     A_constr = np.zeros((bins,bins))
     l_constr = 0*np.ones(bins) # Positive constraints
     A_constr[:bins,:bins] = np.eye(bins)
-    upper_bound = reg_max_alpha # weird that it must be large
+    upper_bound = 5 # weird that it must be large
     u_constr = upper_bound*np.ones(bins) # Sum-to one constraints
     constr = LinearConstraint(A_constr,l_constr,u_constr)
 
     # Solve
     sol = minimize(_f_grad, x0, method='trust-constr', bounds=None, constraints=constr, jac=True, options={'verbose': 0})
 
-    if project_on_probabilitySimplex:
-        return project_probabilitySimplex(sol.x)
-    else:
-        return sol.x/np.sum(sol.x)
+    return project_probabilitySimplex(sol.x)
 
 ## TO UPDATE TO ALLOW INTEGER ENTRIES
 def histogramFromSketch_M2M(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins_cont=10,project_on_probabilitySimplex=True,reg_rho=0.01):
@@ -529,7 +620,7 @@ def histogramFromSketch_M2M(sketch,Phi,domain,dimension,nb_cat_per_dim=None,bins
         for j in range(m):
             Omega_diffs[:,i*m+j] = Omega[:,i] - Omega[:,j]
 
-    Phi_diffs = SimpleFeatureMap("complexExponential", Omega_diffs,xi=np.zeros(m**2),c_norm=Phi.c_norm)
+    Phi_diffs = SimpleFeatureMap("complexExponential", Omega_diffs,xi=Phi.xi,c_norm=Phi.c_norm)
 
     # Evaluate the box constraints Fourier transform thanks to this sketch function
     z_diffs_domain = fourierSketchOfBox(domain,Phi_diffs,nb_cat_per_dim)
