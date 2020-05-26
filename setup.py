@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pycle",
-    version="0.9",
+    version="1.0",
     author="Vincent Schellekens",
     author_email="vincent.schellekens@uclouvain.be",
     description="Python toolbox for Compressive Learning (machine learning from a sketch)",
