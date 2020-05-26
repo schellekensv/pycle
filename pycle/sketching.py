@@ -6,12 +6,6 @@ import matplotlib.pyplot as plt # For verbose
 import scipy.optimize
 import sys          # For error handling
 from copy import copy
-
-NUMBA_INSTALLED = True
-try:
-    import numba
-except ImportError:
-    NUMBA_INSTALLED = False
     
     
 #######################################
@@ -30,7 +24,7 @@ def drawDithering(m,bounds = None):
 # 1.1: frequency sampling functions
 # 1.1.1: gaussian sampling
 def drawFrequencies_Gaussian(d,m,Sigma = None):
-    '''draws frequencies according to some sampling pattern''' # add good specs
+    '''draws frequencies according to some sampling pattern'''
     if Sigma is None:
         Sigma = np.identity(d)
     Om = np.random.multivariate_normal(np.zeros(d), np.linalg.inv(Sigma), m).T # inverse of sigma
@@ -45,7 +39,7 @@ def drawFrequencies_FoldedGaussian(d,m,Sigma = None):
     R = np.abs(np.random.randn(m)) # folded standard normal distribution radii
     phi = np.random.randn(d,m)
     phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
-    SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) # TO CHECK
+    SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) 
     
     Om = SigFact@phi*R
     
@@ -83,12 +77,12 @@ def drawFrequencies_AdaptedRadius(d,m,Sigma = None,KMeans=False):
         Sigma = np.identity(d)
         
     # Sample the radii
-    r = np.linspace(0,5,2001) # what are the best params? this seems reasonable
+    r = np.linspace(0,5,2001) 
     R = sampleFromPDF(pdfAdaptedRadius(r,KMeans),r,nsamples=m)
     
     phi = np.random.randn(d,m)
     phi = phi / np.linalg.norm(phi,axis=0) # normalize -> randomly sampled from unit sphere
-    SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) # TO CHECK
+    SigFact = np.linalg.inv(np.linalg.cholesky(Sigma)) 
     
     Om = SigFact@phi*R 
     
@@ -96,7 +90,7 @@ def drawFrequencies_AdaptedRadius(d,m,Sigma = None,KMeans=False):
 
 
 def pdf_diffOfGaussians(r,GMM_upper=None,GMM_lower=None):
-    """Here, GMM is given in terms of SD and not variance (change?)"""
+    """Here, GMM is given in terms of SD and not variance"""
     if isinstance(GMM_upper,tuple):
         (weights_upper,sigmas_upper) = GMM_upper
     elif GMM_upper is None:
@@ -275,8 +269,6 @@ def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIteratio
                 - w:     (K,)-numpy array, the weigths of the scale mixture (sum to 1)
                 - Sigma: (K,d,d)-numpy array, the dxd covariances in the scale mixture
     """
-    # TODOS:
-    # - estimate nonisotropic Sigma?
 
     return_format_is_matrix = K is None
     K = 1 if K is None else K
@@ -479,53 +471,8 @@ _dico_nonlinearities = {
     "cosine": (lambda x: np.cos(x),lambda x: -np.sin(x))
  }
 
-# 2.2: in development, use numba to speed up sketching: 
-# Instantiate the RFF sketch feature map
-def generateRRFmap(Omega,xi = None,use_numba = True,return_gradient = True,normalize = False):
-    """
-    Returns a function computing the (complex) random Fourier features and its gradient:
-        RFF(x) = exp(i*(Omega*x + xi))
-    where i is the imaginary unit, Omega and xi are provided. Uses numba acceleration by default.
-        
-    Arguments:
-        
-    Returns:
-    """
-    
-    if normalize:
-        c_norm = 1./np.sqrt(Omega.shape[1]) # 1/sqrt(m)
-    else:
-        c_norm = 1.
-    
-    if xi is None:
-        xi = np.zeros(Omega.shape[1])
-    
-    def _RFF(x):
-        return c_norm*np.exp(1j*(np.dot(Omega.T,x) + xi))
 
-    def _grad_RFF(x):
-        return 1j*c_norm*np.exp(1j*(np.dot(Omega.T,x) + xi))*Omega
-    
-    if use_numba and not NUMBA_INSTALLED:
-        use_numba = False # Numba was not found, we can't use it
-        print('Warning: numba not found, falling back to python. Recommended to install numba.')
-    
-    # Use a numba wrapper around the functions
-    if use_numba:
-        RFF = numba.jit(nopython=True)(_RFF)
-        grad_RFF = numba.jit(nopython=True)(_grad_RFF) # No gain??
-    else:
-        RFF = _RFF
-        grad_RFF = _grad_RFF
-        
-    # Return RFF map with its gradient if needed
-    if return_gradient:
-        return (RFF,grad_RFF)
-    else:
-        return RFF
-
-
-# 2.3 FeatureMap objects
+# 2.2 FeatureMap objects
 # Abstract feature map class
 class FeatureMap:
     """Template for a generic Feature Map. Useful to check if an object is an instance of FeatureMap."""
@@ -951,4 +898,4 @@ def fourierSketchOfBox(box,featureMap,nb_cat_per_dim=None, dimensions_to_conside
 #  - Add the square nonlinearity, for sketching for PCA for example
 
 # Long-term:
-# - Fast sketch computation and clean numba if not needed
+# - Fast sketch computation

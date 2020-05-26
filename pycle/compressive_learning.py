@@ -463,8 +463,6 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
 
 
 # TODO COMPRESSIVE_LEARNING in rough importance order
-# - add verbose that makes sense in both functions
-# - support for nondiagonal covariances in the GMM fitting (how?? opt. on manifolds?)
 # - investigate if auto-differentiation might not be smarter
 
 
