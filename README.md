@@ -3,6 +3,11 @@ Pycle stands for PYthon Compressive LEarning; it is a toolbox of methods to perf
 
 Pycle is now stable (version `1.0`), but *still under development*, so don't hesitate to report bugs or other difficulties encountered with the toolbox.
 
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3855114.svg)](https://doi.org/10.5281/zenodo.3855114)
+
+
+
 ## Contains:
 For documentation:
 * A "Guide" folder with semi-detailed introductory guide to this toolbox.
