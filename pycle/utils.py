@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # DATASET GENERATION TOOLS #
 ############################
 
-def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=None,grid_aligned=True,**generation_params):
+def generatedataset_GMM(d, K, n, output_required='dataset', balanced=True, normalize=None, grid_aligned=True, **generation_params):
     """
     Generate a synthetic dataset according to a Gaussian Mixture Model distribution.
     
@@ -44,8 +44,11 @@ def generatedataset_GMM(d,K,n,output_required='dataset',balanced=True,normalize=
     
     Other Parameters
     ----------------
-    TODO UPDATE THIS
-    isotropic: bool (default=True), if True each Gaussian has covariance of type scalar*Identity
+    separation_scale: scale driving the average separation of the Gaussians (larger for well-separated modes)
+    separation_min: minimal distance separation to impose between the centers
+    covariance_variability_inter: diversity of Gaussian covariances between the clusters (if = 1 all clusters have the same covariance matrix scale, if > 1 the clusters have covariances of different scales)
+    covariance_variability_intra: diversity of the covariance matrix inside each cluster (if = 1 all dimensions have the same variance (isotropic Gaussian), if > 1 the covariance matrix has different entries for each dimension)
+    all_covariance_scaling: a re-scaling factor that re-scales the covariance of all Gaussians (redundant with separation_scale)
     
     """
     ## STEP 0: Parse input generation parameters
@@ -530,7 +533,24 @@ from matplotlib.patches import Ellipse
 from scipy.stats import chi2
 
 def plotGMM(X=None,P=None,dims=(0,1),d=2,proportionInGMM = None):
-    """TODO"""
+    """
+    Plots a Gaussian mixture model (and associated data) in 2 dimensions.
+    
+    Parameters
+    ----------
+    X: (n,d)-numpy array, the dataset of n examples in dimension d (optional)
+    P: a a tuple (w,mus,Sigmas) of three numpy arrays describing the Gaussian mixture model, where
+        - w:      (K,)   -numpy array containing the weigths ('mixing coefficients') of the Gaussians
+        - mus:    (K,d)  -numpy array containing the means of the Gaussians
+        - Sigmas: (K,d,d)-numpy array containing the covariance matrices of the Gaussians
+    dims: tuple of two integers (default (0,1)), lists the 2 dimensions out of the d in X to plot
+    
+    
+    Additional Parameters
+    ---------------------
+    d: ambient dimension (used to compute the size of the contour)
+    proportionInGMM: proportion of data to include in the GMM ellipses (default 95%)
+    """
     # To finish
 
     if P is not None:
@@ -575,4 +595,3 @@ def plotGMM(X=None,P=None,dims=(0,1),d=2,proportionInGMM = None):
     return
 
 
-# TODO plot centroids?
