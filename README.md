@@ -19,5 +19,6 @@ The code itself, located in the "pycle" folder, structured into 3 main files:
 
 ## Citing this toolbox:
 If you publish research using this toolbox, please follow this link for to get citation references (e.g., to generate BibTeX export files)
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3855114.svg)](https://doi.org/10.5281/zenodo.3855114)
 
