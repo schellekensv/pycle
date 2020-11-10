@@ -1,3 +1,26 @@
+"""MIT License
+
+Copyright (c) 2019 schellekensv
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+
+
 """Contains compressive learning algorithms."""
 
 # Main imports
@@ -81,6 +104,30 @@ def _ThetasToGMM(task,Th,al):
         elif task == "gmm-nondiag":
             clompr_sigma[k] = Th[k,d:].reshape(d,d)
     return (al/np.sum(al),clompr_mu,clompr_sigma)
+
+def _GMMToThetas(task,GMM):
+    """util function, converts a GMM encoding into atoms form"""
+    
+    (al,mus,Sigmas) = GMM
+    (K,d) = mus.shape
+    if task == "gmm":
+        d2 = d*2
+    elif task == "gmm-nondiag":
+        d2 = (d+1)*d
+    else:
+        raise NotImplementedError
+        
+    Th = np.zeros((K,d2))
+    
+    for k in range(K):
+        Th[k,0:d] = mus[k]
+        
+        if task == "gmm":
+            Th[k,d:2*d] = np.diag(Sigmas[k])
+        elif task == "gmm-nondiag":
+            Th[k,d:] = Sigmas[k].reshape(d**2)
+
+    return (Th,al)
 
 
 ## Utility functions to compute the sketch of an atom and its jacobian
@@ -460,6 +507,263 @@ def CLOMPR(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_p
     return None
 
 
+def split(GMM):
+    
+    (w,mus,Sigmas) = GMM # Unpack
+    (K,d) = mus.shape
+    
+    # Initialize
+    splitted_w = np.zeros(2*K)
+    splitted_mus = np.zeros((2*K,d))
+    splitted_Sigmas = np.zeros((2*K,d,d))
+
+    for k in range(K):
+        
+        # Compute eigenvalues
+        (eigvals,eigvecs) = np.linalg.eig(Sigmas[k])
+        
+        # Get largest eigenvector (direction vector)
+        i_max = np.argmax(eigvals)
+        e_max = eigvecs[:,i_max]
+        s_max = np.sqrt(eigvals[i_max])
+        
+        # First half of the split
+        splitted_w[2*k]      = w[k]/2
+        splitted_mus[2*k]    = mus[k] + s_max*e_max
+        splitted_Sigmas[2*k] = Sigmas[k] # v@np.diag(lam)@v.T
+        
+        # Second half of the split
+        splitted_w[2*k+1]      = w[k]/2
+        splitted_mus[2*k+1]    = mus[k] - s_max*e_max
+        splitted_Sigmas[2*k+1] = Sigmas[k]
+    
+    return (splitted_w,splitted_mus,splitted_Sigmas)
+
+def CL_GaussianSplitting(task,sketch,featureMap,K,bounds,dimensions_to_consider=None, nb_cat_per_dim=None,nIterations=None, nRepetitions=1, ftol=1e-6, verbose=0 ):
+    """
+    """
+    ## 0) Defining all the tools we need
+    ####################################
+    ## 0.1) Handle input
+    
+    ## 0.1.2) sketch feature function
+    if isinstance(featureMap,SimpleFeatureMap):
+        d_all = featureMap.d
+        m = featureMap.m
+    else:
+        raise ValueError('The featureMap argument does not match one of the supported formats.')
+
+    # Restrict the dimension
+    if dimensions_to_consider is None:
+        dimensions_to_consider = np.arange(d_all)
+    dimensions_to_ignore = np.delete(np.arange(d_all), dimensions_to_consider)
+    d = dimensions_to_consider.size
+    
+    # Pre-compute sketch of unused dimensions
+    z_to_ignore = fourierSketchOfBox(bounds.T,featureMap,nb_cat_per_dim, dimensions_to_consider = dimensions_to_ignore)
+    # Compensate the normalization constant and the dithering which will be taken into account in the centroid sketch
+    z_to_ignore = z_to_ignore/(featureMap(np.zeros(d_all))) # giving zeros yields the dithering and the c_norm
+    
+    # Restrict the featureMap for the centroids
+    Phi = copy(featureMap) # Don't touch to the inital map, Phi is featureMap restricted to relevant dims
+    Phi.d = d
+    Phi.Omega = featureMap.Omega[dimensions_to_consider]
+    
+    ## 0.1.3) nb of iterations
+    if nIterations is None:
+        nIterations = int(np.ceil(np.log2(K)))
+    
+    ## 0.1.4) Bounds of the optimization problems
+    if bounds is None:
+        lowb = -np.ones(d) # by default data is assumed normalized
+        uppb = +np.ones(d)
+        if verbose > 0: print("WARNING: data is assumed to be normalized in [-1,+1]^d")
+    else:
+        lowb = bounds[0][dimensions_to_consider]
+        uppb = bounds[1][dimensions_to_consider] # Bounds for one centroid
+
+    # Format the bounds for the optimization solver
+    boundstheta = np.array([lowb,uppb]).T.tolist()  # bounds for the means
+    varianceLowerBound = 1e-8
+    for i in range(d): boundstheta.append([varianceLowerBound,(uppb[i]-lowb[i])**2]) # bounds for the variance
+    
+    if task == "gmm-nondiag":
+        # Bounds for the nondiagonal problem
+        boundstheta_finetuning = np.array([lowb,uppb]).T.tolist()  # bounds for the means
+        varianceLowerBound = 1e-8
+        varianceUpperBound = ((uppb-lowb).max()/2)**2
+
+        _lowb_var = -varianceUpperBound*np.ones((d,d))
+        np.fill_diagonal(_lowb_var, varianceLowerBound)
+        _uppb_var = +varianceUpperBound*np.ones((d,d))
+
+        _boundsvar = np.append(_lowb_var.reshape(-1),_uppb_var.reshape(-1)).reshape(2,d**2).T.tolist()
+        for _i in _boundsvar: boundstheta_finetuning.append(_i) # bounds for the variance
+    
+
+    ## 0.1.5) Misc. initializations
+    # Chosen method for the optimization solver
+    opt_method = 'L-BFGS-B' # could also consider 'TNC'
+    # Separated real and imaginary part of the sketch
+    sketch_ri = np.r_[sketch.real, sketch.imag]
+    if task == "gmm":
+        thetadim = 2*d
+    elif task == "gmm-nondiag":
+        thetadim = d*(d+1)
+        
+    ## THE ACTUAL ALGORITHM
+    #######################
+    bestResidualNorm = np.inf 
+    bestTheta =  None
+    bestalpha = None
+    for iRun in range(nRepetitions):
+    
+        ## 1) Initialization
+        r = sketch  # residual
+        Theta = np.empty([0,thetadim]) # Theta is a nbAtoms-by-atomDimension array
+        A = np.empty([m,0]) # Contains the sketches of the atoms
+        
+        # Find the first atom theta, most correlated with residual
+            
+        mu0 = np.random.uniform(lowb,uppb) # initial mean
+        sig0 = (10**np.random.uniform(-0.8,-0.1,d) * (uppb-lowb))**2 # initial covariances
+        th_0 = _stackAtom("gmm",mu0,sig0)
+
+        # And solve with LBFGS   
+        sol = minimize(lambda th: _CLOMPR_step1_fun_grad("gmm",Phi,th,r,z_to_ignore,verbose),
+                                    x0 = th_0, method=opt_method, jac=True,
+                                    bounds=boundstheta)
+
+        if task == "gmm-nondiag":
+            #(mu0,sig0) = _destackAtom("gmm",sol.x,d)
+            th_0 = _stackAtom("gmm-nondiag",mu0,np.diag(sig0))
+            
+            
+            sol = minimize(lambda th: _CLOMPR_step1_fun_grad("gmm-nondiag",Phi,th,r,z_to_ignore,verbose),
+                                        x0 = th_0, method=opt_method, jac=True,
+                                        bounds=boundstheta_finetuning)
+
+            #(mu0,sig0) = _destackAtom("gmm",sol.x,d)
+
+            #th_0 = _stackAtom("gmm-nondiag",mu0,np.diag(sig0))
+            
+            th_0 = sol.x
+            
+
+        # And solve with LBFGS   
+        #sol = minimize(lambda th: _CLOMPR_step1_fun_grad(task,Phi,th,r,z_to_ignore,verbose),
+        #                                x0 = th_0, method=opt_method, jac=True,
+        #                                bounds=boundstheta)
+        new_theta = sol.x
+
+        if task == "gmm-nondiag":
+            new_theta = _makeGMMfeasible(new_theta,d)
+            
+        Theta = np.append(Theta,[new_theta],axis=0) 
+        alpha = np.array([1.])
+        
+            
+        
+        ## 2) Main optimization
+        for i in range(nIterations):
+            ## 2.1] Step 1 : split all atoms
+            newGMM = split(_ThetasToGMM(task,Theta,alpha))
+            (Theta,alpha) = _GMMToThetas(task,newGMM)
+
+            ## 2.2] Step 2 : make them the new support
+            A = np.empty([m,0])
+            for theta_i in Theta:
+                Apthi = _sketchAtom(task,Phi,theta_i,z_to_ignore)
+                A = np.c_[A,Apthi]
+                
+            ## 2.3] Step 3 : if necessary, hard-threshold to nforce sparsity
+            while Theta.shape[0] > K:
+                norms = np.linalg.norm(A,axis=0)
+                norms[np.where(norms < 1e-15)[0]] = 1e-15 # Avoid /0
+                A_norm =  A/norms # normalize, unlike step 4
+                A_normri = np.r_[A_norm.real, A_norm.imag] 
+                (beta,_) = nnls(A_normri,sketch_ri) # non-negative least squares
+
+                index_to_delete = np.argmin(beta)
+                Theta = np.delete(Theta, index_to_delete, axis=0)
+                A = np.delete(A, index_to_delete, axis=1)
+
+
+            ## 2.4] Step 4 : project to find weights
+            Ari = np.r_[A.real, A.imag]
+            (alpha,_) = nnls(Ari,sketch_ri) # non-negative least squares
+
+
+            ## 2.5] Step 5
+            p0 = _stackTheta(task,Theta,alpha) # Initialize at current solution 
+            # Compute the bounds for step 5 : boundsOfOneAtom * numberAtoms then boundsOneWeight * numberAtoms
+            if task == "gmm-nondiag":
+                boundsThetaAlpha = boundstheta_finetuning * Theta.shape[0] + [[1e-9,2]] * Theta.shape[0]
+            else:
+                boundsThetaAlpha = boundstheta * Theta.shape[0] + [[1e-9,2]] * Theta.shape[0]
+            # Solve
+            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
+                                            x0 = p0, method=opt_method, jac=True,
+                                            bounds=boundsThetaAlpha, options={'ftol': ftol}) 
+            (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)
+            
+            # Make covariances feasible
+            if task == "gmm-nondiag":
+                for k in range(Theta.shape[0]):
+                    Theta[k] = _makeGMMfeasible(Theta[k],d)
+                    
+
+            # The atoms have changed: we must re-compute A
+            A = np.empty([m,0])
+            for theta_i in Theta:
+                Apthi = _sketchAtom(task,Phi,theta_i,z_to_ignore)
+                A = np.c_[A,Apthi]
+            # Update residual
+            r = sketch - A@alpha
+
+        ## 3) Finalization boundstheta_finetuning
+        # Last optimization with the default (fine-grained) tolerance
+        if task == "gmm-nondiag":
+            if verbose > 0: print('finetuning')
+            Theta_new = np.zeros((K,d*(d+1))) # Expand to have full cov matrix
+            for k in range(K):
+                (mu,sig2) = _destackAtom("gmm",Theta[k],d)
+                # put current sol on the diagonal of full covariance matrix
+                Theta_new[k] = _stackAtom("gmm-nondiag",mu,np.diag(sig2))
+            Theta = Theta_new # overwrite
+            
+            boundsThetaAlpha = boundstheta_finetuning * Theta.shape[0] + [[1e-9,2]] * Theta.shape[0]
+            
+        if task == "gmm-nondiag" or ftol >= 1e-8:
+            p0 = _stackTheta(task,Theta,alpha)
+            
+            sol = minimize(lambda p: _CLOMPR_step5_fun_grad(task,Phi,p,sketch,z_to_ignore),
+                                            x0 = p0, method=opt_method, jac=True,
+                                            bounds=boundsThetaAlpha)  # Here ftol is much smaller
+            (Theta,alpha) = _destackTheta(task,sol.x,Phi.d)  
+            if task == "gmm-nondiag":
+                for k in range(Theta.shape[0]):
+                    Theta[k] = _makeGMMfeasible(Theta[k],d)
+        
+        
+        # Normalize alpha
+        alpha /= np.sum(alpha)
+    
+    
+        runResidualNorm = np.linalg.norm(sketch - A@alpha)
+        if verbose>1: print('Run {}, residual norm is {} (best: {})'.format(iRun,runResidualNorm,bestResidualNorm))
+        if runResidualNorm <= bestResidualNorm:
+            bestResidualNorm = runResidualNorm
+            bestTheta = Theta
+            bestalpha = alpha
+    
+    ## FORMAT OUTPUT
+    if task == "kmeans":
+        return (bestalpha,bestTheta)
+    elif task == "gmm" or task == "gmm-nondiag":
+        return _ThetasToGMM(task,bestTheta,bestalpha)
+        
+    return None
 
 
 # TODO COMPRESSIVE_LEARNING in rough importance order

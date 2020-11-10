@@ -1,3 +1,26 @@
+"""MIT License
+
+Copyright (c) 2019 schellekensv
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+
+
 """Contains a set of misc. useful tools for the compressive learning toolbox"""
 
 import numpy as np
@@ -440,9 +463,7 @@ def loglikelihood_GMM(P,X,robust = True):
     Returns:
         - loglikelihood: real, the loglikelihood value defined above
     """
-    
-    # TODO : avoid recomputations of inv
-    
+        
     # Unpack
     (w,mu,Sig) = P
     (K,d) = mu.shape
@@ -450,21 +471,28 @@ def loglikelihood_GMM(P,X,robust = True):
     logp = np.zeros(X.shape[0])
     p = np.zeros(X.shape[0])
     
-    for k in range(K):
-        p += w[k]*scipy.stats.multivariate_normal.pdf(X, mean=mu[k], cov=Sig[k], allow_singular=True)
-    logp = np.log(p)
-    
-    if robust:
-        b = np.zeros(K)
-        a = np.zeros(K)
+    try:
         for k in range(K):
-            a[k] = w[k]*((2*np.pi)**(-d/2))*(np.linalg.det(Sig[k])**(-1/2))
-        for i in np.where(p==0)[0]: # Replace the inf values due to rounding p to 0
+            p += w[k]*scipy.stats.multivariate_normal.pdf(X, mean=mu[k], cov=Sig[k], allow_singular=False)
+        logp = np.log(p)
+    except np.linalg.LinAlgError:
+        
+    
+        if robust:
+            b = np.zeros(K)
+            a = np.zeros(K)
+            Sig_inv = np.zeros(Sig.shape)
             for k in range(K):
-                b[k] = -(X[i]-mu[k])@np.linalg.inv(Sig[k])@(X[i]-mu[k])/2
-            lc = b.max()
-            ebc = np.exp(b-lc)
-            logp[i] = np.log(ebc@a) + lc
+                a[k] = w[k]*((2*np.pi)**(-d/2))*(np.linalg.det(Sig[k])**(-1/2))
+                Sig_inv[k] = np.linalg.inv(Sig[k])
+            for i in range(p.size): # Replace the inf values due to rounding p to 0
+                for k in range(K):
+                    b[k] = -(X[i]-mu[k])@Sig_inv[k]@(X[i]-mu[k])/2
+                lc = b.max()
+                ebc = np.exp(b-lc)
+                logp[i] = np.log(ebc@a) + lc
+        else:
+            raise np.linalg.LinAlgError('singular matrix')
         
         
     return np.mean(logp)
