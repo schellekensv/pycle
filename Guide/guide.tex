@@ -181,7 +181,7 @@ z = sk.computeSketch(X,Phi) # z is a numpy array containing the sketch
 \end{lstlisting}
 
 \subsection{Learning from the sketch with the \code{compressive\_learning.py} submodule} 
-For now, \pycle~features mainly one algorithm called \code{CLOMPR}. It has been proposed to estimate mixtures of Gaussians~\cite{keriven2018sketching} and to perform k-means clustering~\cite{keriven2017compressive2}. In \pycle, it is called as follows:
+For now, \pycle~features mainly one algorithm called \code{CLOMPR}. It has been proposed to estimate mixtures of Gaussians~\cite{keriven2018sketching} and to perform k-means clustering~\cite{keriven2017compressive2}. In \pycle, learning methods are wrapped into instances of the abstract \code{Solver} class, which gives for example:
 
 \begin{lstlisting}
 import pycle.compressive_learning as cl
@@ -191,20 +191,37 @@ import pycle.compressive_learning as cl
 # Bounds for the data
 bounds = np.array([X.min(axis=0),X.max(axis=0)])
 
-# Define the task
-task_name = ... # See below, either "k-means", "GMM" or "GMM-nondiag"
-K = ... # Number of centroids/gaussian modes
+
+# Number of centroids/gaussian modes
+K = ... 
+
+# Create the (task-specific) solver (children of the Solver class)
+solver = cl.CLOMP_CKM(Phi,K,bounds,z)  # For k-means
+# ... OR ...
+solver = cl.CLOMP_dGMM(Phi,K,bounds,z) # For GMM
 
 # Learn from the sketch
-theta = cl.CLOMPR(task_name,z,Phi,K,bounds)
+solver.fit_once()
+# ... OR ...
+solver.fit_several_times(n_times) # Selects the best out of n_times independent trials
+
+# Access the solution
+centroids = solver.get_centroids() # For k-means
+# ... OR ...
+GMM = solver.get_GMM() # For GMM
 
 # Do something with the model (prediction, visualization, ...)
 \end{lstlisting}
 
-The first argument \code{task\_name} defines the task to solve, which conditions the format of the output \code{theta}. Currently, the available options are 
+The way \code{Solver} instances are created depend on the specific task at hand, but for the defines the \code{CLOMP\_CKM} and \code{CLOMP\_dGMM} objects (for k-means or (diagonal) Gaussian Mixture Modeling, respectively), you pass in a \code{FeatureMap} object, a number of components \code{K}, data bounds and the sketch vector. 
+
+Then, \code{fit\_once} or \code{fit\_several\_times} can be called to actually run the learning algorithm. With \code{fit\_several\_times}, several independent trials are run and the best one is selected.
+
+Finally, the achieved solution can be recovered with the \code{solver.current\_sol} attribute, or by calling specific functions which improve the output format, such as
+
 \begin{itemize}
-	\item \code{task\_name = "k-means"}, used to estimate the centroids of k-means clusters. In this case, \code{theta = (alpha,C)} is a tuple, where \code{alpha} contains the weights of the clusters and \code{C} its centroids (in a $(K,d)$ numpy array).
-	\item \code{task\_name = "GMM"} or \code{"GMM-nondiag"}, used to fit a mixture of Gaussians to the data. Here, \code{theta = (w,mus,covs)} is a tuple of three elements, where \code{w} are the mixture coefficients, and \code{mus} and \code{covs} are the centers (resp. covariance matrices) of the Gaussian modes, in a $(K,d)$ numpy array (resp. $(K,d,d)$ numpy array). The difference between the two options is that \code{"GMM"} assumes diagonal covariance matrices, while \code{"GMM-nondiag"} improves the fit by considering general covariance matrices, during a post-processing fine-tuning step.
+	\item \code{solver.get\_centroids()}, outputs the centroids only (in a $(K,d)$ numpy array).
+	\item \code{solver.get\_GMM()}, returns a tuple of three elements \code{(w,mus,covs)}, where \code{w} are the mixture coefficients, and \code{mus} and \code{covs} are the centers (resp. covariance matrices) of the Gaussian modes, in a $(K,d)$ numpy array (resp. $(K,d,d)$ numpy array). 
 \end{itemize}
 
 Detailed examples of those tasks are available on the main github page of the \pycle~toolbox. With that and the documentation\footnote{Just type \code{help(nameOfAFunction) if you want to see all the available options.}} of the different functions, you should have a good idea of how to use the toolbox in practice. In the next section, some advanced functionalities of the toolbox are described. 
