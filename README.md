@@ -1,7 +1,7 @@
 # The pycle toolbox
 Pycle stands for PYthon Compressive LEarning; it is a toolbox of methods to perform compressive learning (also known as sketched learning), where the training set is not used directly but first heavily compressed; this allows to learn from large-scale datasets with drastically reduced computational resources.
 
-Pycle is now stable (version `1.0`), but *still under development*, so don't hesitate to report bugs or other difficulties encountered with the toolbox.
+Pycle is now stable (version `1.2`), but *still under development*, so don't hesitate to report bugs or other difficulties encountered with the toolbox.
 
 
 ## Contents of this repo:
