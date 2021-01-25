@@ -551,7 +551,6 @@ class CLOMP_dGMM(CLOMP):
         
     def randomly_initialize_new_atom(self):
         mu0 = np.random.uniform(self.bounds[0],self.bounds[1]) # initial mean
-        
         # check we can use sketch heuristic (large enough m)
         MINIMAL_C_VALUE = 6
         MAXIMAL_C_VALUE = 25
@@ -559,7 +558,7 @@ class CLOMP_dGMM(CLOMP):
         if self.init_variance_mode == "sketch":
             c = max(self.Phi.m//MINIMAL_POINTS_PER_BOX,MAXIMAL_C_VALUE)
             if c < MINIMAL_C_VALUE:
-                self.init_variance_mode == "bounds"
+                self.init_variance_mode = "bounds"
         
         if self.init_variance_mode == "sketch":
             sigma2_bar = estimate_Sigma_from_sketch(self.sketch,self.Phi,c=c)
@@ -594,8 +593,8 @@ class CLHS_dGMM(CLOMP_dGMM):
     Requires the feature map to be Fourier features.
     """
     
-    def __init__(self,Phi,K,bounds,sketch=None,sketch_weight = 1.,verbose=0):
-        super(CLHS_dGMM, self).__init__(Phi,K,bounds,sketch,sketch_weight,verbose)
+    def __init__(self,Phi,K,bounds,sketch=None,sketch_weight = 1.,init_variance_mode="sketch",verbose=0):
+        super(CLHS_dGMM, self).__init__(Phi,K,bounds,sketch,sketch_weight,init_variance_mode,verbose)
         
     # New split methods
     def split_one_atom(self,k):
