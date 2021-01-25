@@ -263,7 +263,108 @@ def drawFrequencies(drawType,d,m,Sigma = None,nb_cat_per_dim=None):
     
     return Omega
 
-# The following funtion allows to estimate Sigma
+# The following funtions allows to estimate Sigma (some utils first, main function is "estimate_Sigma")
+# Optimization problem to fit a GMM curve to the data
+def _fun_grad_fit_sigmas(p,R,z):
+    """
+    Function and gradient to solve the optimization problem
+        min_{w,sigs2} sum_{i = 1}^n ( z[i] - sum_{k=1}^K w[k]*exp(-R[i]^2*sig2[k]/2) )^2
+    Arguments:
+        - p, a (2K,) numpy array obtained by stacking
+            - w : (K,) numpy array
+            - sigs2 : (K,) numpy array
+        - R: (n,) numpy array, data to fit (x label)
+        - z: (n,) numpy array, data to fit (y label)
+    Returns:
+        - The function evaluation
+        - The gradient
+    """
+
+    K = p.size//2
+    w = p[:K]
+    sigs2 = p[K:]
+    n = R.size
+    # Naive implementation, TODO better?
+    fun = 0
+    grad = np.zeros(2*K)
+    for i in range(n):
+        fun += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.))**2
+        grad[:K] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- np.exp(-(sigs2*R[i]**2)/2.)) # grad of w
+        grad[K:] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- w * np.exp(-(sigs2*R[i]**2)/2.)) * (-0.5*R[i]**2) # grad of sigma2
+    return (fun,grad)
+
+# For normalization in the optimization problem
+def _callback_fit_sigmas(p):
+    K = p.size//2
+    p[:K] /= np.sum(p[:K])
+
+def estimate_Sigma_from_sketch(z,Phi,K=1,c=20,mode='max',sigma2_bar=None,weights_bar=None,should_plot=False):
+    # Parse
+    if mode == 'max':
+        mode_criterion = np.argmax 
+    elif mode == 'min':
+        mode_criterion = np.argmin 
+    else:
+        raise ValueError("Unrecocgnized mode ({})".format(mode))
+        
+    # sort the freqs by norm
+    Rs = np.linalg.norm(Phi.Omega,axis=0)
+    i_sort = np.argsort(Rs)
+    Rs = Rs[i_sort]
+    z_sort = z[i_sort]/Phi.c_norm # sort and normalize individual entries to 1
+    
+    # Initialization
+    # number of freqs per box
+    s = Phi.m//c
+    # init point
+    if sigma2_bar is None:
+        sigma2_bar = np.random.uniform(0.3,1.6,K)
+    if weights_bar is None:
+        weights_bar = np.ones(K)/K
+
+    # find the indices of the max of each block
+    jqs = np.empty(c) 
+    for ic in range(c):
+        j_max = mode_criterion(np.abs(z_sort)[ic*s:(ic+1)*s]) + ic*s
+        jqs[ic] = j_max
+    jqs = jqs.astype(int)
+    R_tofit = Rs[jqs]
+    z_tofit = np.abs(z_sort)[jqs]
+
+    # Set up the fitting opt. problem
+    f = lambda p: _fun_grad_fit_sigmas(p,R_tofit,z_tofit) # cost
+
+    p0 = np.zeros(2*K) # initial point
+    p0[:K] = weights_bar # w
+    p0[K:] = sigma2_bar 
+
+    # Bounds of the optimization problem
+    bounds = []
+    for k in range(K): bounds.append([1e-5,1]) # bounds for the weigths
+    for k in range(K): bounds.append([5e-4*sigma2_bar[k],2e3*sigma2_bar[k]]) # bounds for the sigmas -> cant cange too much
+
+    # Solve the sigma^2 optimization problem
+    sol = scipy.optimize.minimize(f, p0,jac = True, bounds = bounds,callback=_callback_fit_sigmas)
+    p = sol.x
+    weights_bar = np.array(p[:K])/np.sum(p[:K])
+    sigma2_bar = np.array(p[K:])
+
+    # Plot if required
+    if should_plot:
+        plt.figure(figsize=(10,5))
+        rfit = np.linspace(0,Rs.max(),100)
+        zfit = np.zeros(rfit.shape)
+        for k in range(K):
+            zfit += weights_bar[k]*np.exp(-(sigma2_bar[k]*rfit**2)/2.)
+        plt.plot(Rs,np.abs(z_sort),'.')
+        plt.plot(R_tofit,z_tofit,'.')
+        plt.plot(rfit,zfit)
+        plt.xlabel('R')
+        plt.ylabel('|z|')
+        plt.show()
+
+    return sigma2_bar
+
 def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIterations=5,mode='max',verbose=0):
     """Automatically estimates the "Sigma" parameter(s) (the scale of data clusters) for generating the sketch operator.
     
@@ -302,14 +403,7 @@ def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIteratio
         X = dataset[np.random.choice(n,n0,replace=False)]
     else:
         X = dataset
-        
-    # Parse
-    if mode == 'max':
-        mode_criterion = np.argmax 
-    elif mode == 'min':
-        mode_criterion = np.argmin 
-    else:
-        raise ValueError("Unrecocgnized mode ({})".format(mode))
+    
 
     # Check if we dont overfit the empirical Fourier measurements
     if (m0 < (K * 2)*c): 
@@ -318,41 +412,7 @@ def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIteratio
     # Initialization
     #maxNorm = np.max(np.linalg.norm(X,axis=1)) 
     sigma2_bar = np.random.uniform(0.3,1.6,K)
-    weights_bar = np.ones(K)/K
-    s = m0//c # number of freqs per box
-    
-    # Optimization problem to fit a GMM curve to the data
-    def _fun_grad_fit_sigmas(p,R,z):
-        """
-        Function and gradient to solve the optimization problem
-            min_{w,sigs2} sum_{i = 1}^n ( z[i] - sum_{k=1}^K w[k]*exp(-R[i]^2*sig2[k]/2) )^2
-        Arguments:
-            - p, a (2K,) numpy array obtained by stacking
-                - w : (K,) numpy array
-                - sigs2 : (K,) numpy array
-            - R: (n,) numpy array, data to fit (x label)
-            - z: (n,) numpy array, data to fit (y label)
-        Returns:
-            - The function evaluation
-            - The gradient
-        """
-
-        K = p.size//2
-        w = p[:K]
-        sigs2 = p[K:]
-        n = R.size
-        # Naive implementation, TODO better?
-        fun = 0
-        grad = np.zeros(2*K)
-        for i in range(n):
-            fun += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.))**2
-            grad[:K] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- np.exp(-(sigs2*R[i]**2)/2.)) # grad of w
-            grad[K:] += (z[i] - w@np.exp(-(sigs2*R[i]**2)/2.)) * (- w * np.exp(-(sigs2*R[i]**2)/2.)) * (-0.5*R[i]**2) # grad of sigma2
-        return (fun,grad)
-    
-    # For normalization in the optimization problem
-    def _callback(p):
-        p[:K] /= np.sum(p[:K])
+    weights_bar = np.ones(K)/K    
 
     # Actual algorithm
     for i in range(nIterations):
@@ -360,82 +420,12 @@ def estimate_Sigma(dataset,m0,K=None,c=20,n0=None,drawFreq_type = "AR",nIteratio
         sigma2_bar_matrix = np.outer(sigma2_bar,np.eye(d)).reshape(K,d,d)  # covariances in (K,d,d) format
         Omega0 = drawFrequencies(drawFreq_type,d,m0,Sigma = (weights_bar,sigma2_bar_matrix))
         
-        # Sort the frequencies
-        Rs = np.linalg.norm(Omega0,axis=0)
-        i_sort = np.argsort(Rs)
-        Omega0 = Omega0[:,i_sort]
-        Rs = Rs[i_sort]
-        
         # Compute unnormalized complex exponential sketch
         Phi0 = SimpleFeatureMap("ComplexExponential",Omega0)
         z0 = computeSketch(X,Phi0) 
         
-        # find the indices of the max of each block
-        jqs = np.empty(c) 
-        for ic in range(c):
-            j_max = mode_criterion(np.abs(z0)[ic*s:(ic+1)*s]) + ic*s
-            jqs[ic] = j_max
-        jqs = jqs.astype(int)
-        R_tofit = Rs[jqs]
-        z_tofit = np.abs(z0)[jqs]
-        
-        # Plot if required
-        if verbose > 1:
-            plt.figure(figsize=(10,5))
-            plt.plot(Rs,np.abs(z0),'.')
-            plt.plot(Rs[jqs],np.abs(z0)[jqs],'.')
-            plt.xlabel('R')
-            plt.ylabel('|z|')
-            plt.show()
-        
-        # Set up the fitting opt. problem
-        f = lambda p: _fun_grad_fit_sigmas(p,R_tofit,z_tofit) # cost
-        
-        p0 = np.zeros(2*K) # initial point
-        p0[:K] = weights_bar # w
-        p0[K:] = sigma2_bar 
-        #p0[K:] = np.random.uniform(0.5,1.5,K)/(np.median(R_tofit)**2) # sig2, heuristic to have good gradient at start
-        # TODO improve in the next iterates?
-
-        # Bounds of the optimization problem
-        bounds = []
-        for k in range(K): bounds.append([1e-5,1]) # bounds for the weigths
-        for k in range(K): bounds.append([5e-4*sigma2_bar[k],2e3*sigma2_bar[k]]) # bounds for the sigmas -> cant cange too much
-    
-        # Solve the sigma^2 optimization problem
-        sol = scipy.optimize.minimize(f, p0,jac = True, bounds = bounds,callback=_callback)
-        p = sol.x
-        weights_bar = np.array(p[:K])/np.sum(p[:K])
-        sigma2_bar = np.array(p[K:])
-        
-        # Plot if required
-        if verbose > 1:
-            rfit = np.linspace(0,Rs.max(),100)
-            zfit = np.zeros(rfit.shape)
-            for k in range(K):
-                zfit += weights_bar[k]*np.exp(-(sigma2_bar[k]*rfit**2)/2.)
-            plt.plot(Rs,np.abs(z0),'.')
-            plt.plot(R_tofit,z_tofit,'.')
-            plt.plot(rfit,zfit)
-            plt.xlabel('R')
-            plt.ylabel('|z|')
-            plt.show()
-            
-        
-        
-    # Show final fit
-    if verbose > 0:
-        rfit = np.linspace(0,Rs.max(),100)
-        zfit = np.zeros(rfit.shape)
-        for k in range(K):
-            zfit += weights_bar[k]*np.exp(-(sigma2_bar[k]*rfit**2)/2.)
-        plt.plot(Rs,np.abs(z0),'.')
-        plt.plot(R_tofit,z_tofit,'.')
-        plt.plot(rfit,zfit)
-        plt.xlabel('R')
-        plt.ylabel('|z|')
-        plt.legend(['abs. values of sketch','max abs values on blocks','fitted Gaussian'])
-        plt.show()
+        should_plot = verbose > 1 or (verbose > 0 and i >= nIterations - 1)
+        sigma2_bar = estimate_Sigma_from_sketch(z0,Phi0,K,c,mode,sigma2_bar,weights_bar,should_plot)
 
 
     if return_format_is_matrix:
@@ -470,7 +460,10 @@ def _sawtoothWave(t,T=2*np.pi,centering=True):
     if centering:
         return ( t % T )/T*2-1 
     else:
-        return ( t % T )/T # centering=false => quantization is between 0 and +1
+        return ( t % T )/T # centering=false => output is between 0 and +1
+    
+def _sawtoothWave_complex(t,T=2*np.pi,centering=True):
+    return _sawtoothWave(t-T/4,T=T,centering=centering) + 1j*_sawtoothWave(t-T/2,T=T,centering=centering)
     
 def _triangleWave(t,T=2*np.pi):
     return (2*(t % T)/T ) - (4*(t % T)/T - 2)*( (t // T) % 2 ) - 1
@@ -491,6 +484,8 @@ _dico_nonlinearities = {
     "complexexponential":(_complexExponential,_complexExponential_grad),
     "universalquantization":(_universalQuantization,None),
     "universalquantization_complex":(_universalQuantization_complex,None),
+    "sawtooth":(_sawtoothWave,None),
+    "sawtooth_complex":(_sawtoothWave_complex,None),
     "cosine": (lambda x: np.cos(x),lambda x: -np.sin(x))
  }
 

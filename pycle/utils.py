@@ -474,7 +474,8 @@ def loglikelihood_GMM(P,X,robust = True):
     try:
         for k in range(K):
             p += w[k]*scipy.stats.multivariate_normal.pdf(X, mean=mu[k], cov=Sig[k], allow_singular=False)
-        logp = np.log(p)
+        with np.errstate(divide='ignore'): # ignore divide by zero warning
+            logp = np.log(p)
     except np.linalg.LinAlgError:
         
     
@@ -609,10 +610,15 @@ def plotGMM(X=None,P=None,dims=(0,1),d=2,proportionInGMM = None):
 
         wEll = cst*np.sqrt(lam.max())
         hEll = cst*np.sqrt(lam.min())
-        if np.abs(v_max[0]) >= np.abs(v_max[1])*1e-9:
+        
+        
+        with np.errstate(divide='ignore'): # ignore divide by zero warning
             angle = np.arctan(v_max[1]/v_max[0])*180/(np.pi)
-        else:
-            angle = 0
+        #if np.abs(v_max[0]) >= np.abs(v_max[1])*1e-9:
+        #    angle = np.arctan(v_max[1]/v_max[0])*180/(np.pi)
+        #else:
+        #    angle = 0
+        
         ellipse = Ellipse(xy=mu, width=wEll, height=hEll, angle = angle,
                                 edgecolor='r', fc='None', lw=2)
         ax.add_patch(ellipse)

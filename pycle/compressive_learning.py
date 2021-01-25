@@ -33,7 +33,654 @@ from copy import copy
 import time
 
 # We rely on the sketching functions
-from .sketching import SimpleFeatureMap, fourierSketchOfBox, fourierSketchOfGaussian
+from .sketching import FeatureMap, SimpleFeatureMap, fourierSketchOfBox, fourierSketchOfGaussian, estimate_Sigma_from_sketch
+
+
+
+import numpy as np
+import scipy.optimize
+from pycle.sketching import FeatureMap
+
+
+##################################################
+# 0: abstract template for CL and CL-OMP solvers #
+##################################################
+
+## 0.1 Generic solver (stores a sketch and a solution, can run multiple trials of a learning method to specify)
+class Solver:
+    """
+    Template for a compressive learning solver, used to solve the problem
+        min_(theta) || sketch_weight * z - A_Phi(P_theta) ||_2.
+    Implements several trials of an abstract method and keeps the best one.
+    """
+    def __init__(self,Phi,sketch=None,sketch_weight = 1.,verbose=0):
+        """
+        - Phi: a FeatureMap object
+        - sketch_weight: float, a re-scaling factor for the data sketch
+        """
+        
+        # Encode feature map
+        assert isinstance(Phi,FeatureMap)
+        self.Phi = Phi
+        
+        # Encode sketch and sketch weight
+        self.update_sketch_and_weight(sketch,sketch_weight)
+        
+        # Encode current theta and cost value
+        self.update_current_sol_and_cost(None)
+        
+        # Verbose
+        self.verbose = verbose
+        
+        
+    # Abtract methods
+    # ===============
+    # Methods that have to be instantiated by child classes
+    def sketch_of_solution(self,sol=None):
+        """
+        Should return the sketch of the given solution, A_Phi(P_theta).
+        
+        In: a solution P_theta (the exact encoding is determined by child classes), if None use the current sol 
+        Out: sketch_of_solution: (m,)-array containing the sketch
+        """
+        raise NotImplementedError
+        
+    def fit_once(self,random_restart=False):
+        """Optimizes the cost to the given sketch, by starting at the current solution"""
+        raise NotImplementedError
+    
+    # Generic methods
+    # ===============
+    # They should always work, using the instances of the methdos above
+    def fit_several_times(self,n_repetitions=1,forget_current_sol=False):
+        """Solves the problem n times. If a sketch is given, updates it."""
+
+        # Initialization
+        if forget_current_sol: 
+            # start from scratch
+            best_sol, best_sol_cost = None, np.inf 
+        else:
+            # keep current solution as candidate
+            best_sol, best_sol_cost = self.current_sol, self.current_sol_cost
+        
+        # Main loop, perform independent trials
+        for i_repetition in range(n_repetitions):
+            self.fit_once(random_restart=True)
+            self.update_current_sol_and_cost()
+                        
+            if self.current_sol_cost < best_sol_cost:
+                best_sol, best_sol_cost = self.current_sol, self.current_sol_cost
+                
+        # Set the current sol to the best one we found
+        self.current_sol, self.current_sol_cost = best_sol, best_sol_cost
+        return self.current_sol
+    
+    def update_sketch_and_weight(self,sketch=None,sketch_weight=None):
+        """Updates the residual and cost to the current solution. If sol given, also updates it."""
+        if sketch is not None:
+            self.sketch = sketch
+        if sketch_weight is not None:
+            assert isinstance(sketch_weight,float) or isinstance(sketch_weight,int)
+            self.sketch_weight = sketch_weight
+        self.sketch_reweighted = self.sketch_weight*self.sketch
+        
+    def update_current_sol_and_cost(self,sol=None):
+        """Updates the residual and cost to the current solution. If sol given, also updates it."""
+
+        # Update current sol if argument given
+        if sol is not None:
+            self.current_sol = sol
+        
+        # Update residual and cost
+        try:
+            self.residual = self.sketch_reweighted - self.sketch_of_solution(self.current_sol)
+            self.current_sol_cost = np.linalg.norm(self.residual)
+        except AttributeError: # We are here if self.current_sol does not exist yet
+            self.current_sol, self.residual = None, self.sketch_reweighted
+            self.current_sol_cost = np.inf
+        
+
+        
+## 0.2 CL-OMP template (stores a *mixture model* and implements a generic OMP for it)
+class CLOMP(Solver):
+    """
+    Template for Compressive Learning with Orthogonal Matching Pursuit (CL-OMP) solver,
+    used to the CL problem
+        min_(theta) || sketch_weight * z - A_Phi(P_theta) ||_2,
+    where P_theta = sum_{k=1}^K is a weighted mixture composed of K components P_theta_k,
+    hence the problem to solve becomes
+        min_(alpha,theta_k) || sketch_weight * z - sum_k alpha_k*A_Phi(P_theta_k) ||_2.
+    The CLOMP algorithm works by adding new elements to the mixture one by one.
+    """
+    def __init__(self,Phi,K,d_atom,bounds,sketch=None,sketch_weight = 1.,verbose=0):
+        """
+        - Phi: a FeatureMap object
+        - K: int, target number of mixture components
+        - d_atom: dimension of an atom, should be determined by a child class
+        - sketch: the sketch to be fit (can be None)
+        - sketch_weight: float, a re-scaling factor for the data sketch (default 1)
+        """
+        # Call parent class
+        super(CLOMP, self).__init__(Phi,sketch,sketch_weight,verbose)
+        
+        # Set other values
+        self.K = K
+        self.n_atoms = 0
+        self.d_atom  = d_atom
+        
+        # Initialize empty solution
+        self.initialize_empty_solution()
+        
+        # Set bounds
+        self.set_bounds_atom(bounds) # bounds for an atom
+        
+        # Other minor params
+        self.minimum_atom_norm = 1e-15*np.sqrt(self.d_atom)
+        self.weight_lower_bound = 1e-9
+        self.weight_upper_bound = 2
+        self.step5_ftol = 1e-6
+        
+        
+    # Abtract methods
+    # ===============
+    # Methods that have to be instantiated by child classes
+    
+    # Sketch of a single atom
+    def sketch_of_atom(self,theta_k,return_jacobian=False):
+        """
+        Computes and returns A_Phi(P_theta_k) for an atom P_theta_k.
+        possibly with the jacobian, of size (d_atom,m)
+        """
+        assert theta_k.size == self.d_atom
+        raise NotImplementedError
+        if return_jacobian:
+            return sketch_of_atom, jacobian
+        else:
+            return sketch_of_atom
+        
+    def set_bounds_atom(self,bounds):
+        """
+        Should set self.bounds_atom to a list of length d_atom of lower and upper bounds, i.e.,
+            self.bounds_atom = [[lowerbound_1,upperbound_1], ..., [lowerbound_d_atom,upperbound_d_atom]]
+        """
+        self.bounds = bounds # data bounds
+        raise NotImplementedError
+        self.bounds_atom = None
+        return None
+        
+    def randomly_initialize_new_atom(self):
+        raise NotImplementedError
+        return new_theta
+    
+    # Generic methods
+    # ===============
+    # They should always work, using the instances of the methdos above
+    def initialize_empty_solution(self):
+        self.n_atoms = 0
+        self.alpha = np.empty(0)                   # (n_atoms,)-array, weigths of the mixture elements
+        self.Theta = np.empty((0,self.d_atom))     # (n_atoms,d_atom)-array, all the found parameters in matrix form
+        self.Atoms = np.empty((self.Phi.m,0))      # (m,n_atoms)-array, the sketch of the found parameters (m is sketch size)
+        self.Jacobians = np.empty((0,self.d_atom,self.Phi.m))  # (n_atoms,d_atom,m)-array, the jacobians of the residual wrt each atom
+        self.current_sol = (self.alpha,self.Theta) # Overwrite
+    
+    def compute_Atoms_matrix(self,Theta=None,return_jacobian=False):
+        """
+        Computes the matrix of atoms from scratch (if no Theta given, uses current Theta)
+        """
+        if Theta is not None:
+            _n_atoms, _Theta = Theta.shape[0], Theta
+        else:
+            _n_atoms, _Theta = self.n_atoms, self.Theta
+        _A = 1j*np.empty((self.Phi.m,_n_atoms))
+        
+        if return_jacobian:
+            _jac = 1j*np.empty((_n_atoms,self.d_atom,self.Phi.m))
+            for k,theta_k in enumerate(_Theta):
+                _A[:,k], _jac[k,:,:] = self.sketch_of_atom(theta_k,return_jacobian=True)
+            return _A, _jac
+        else:
+            for k,theta_k in enumerate(_Theta):
+                _A[:,k] = self.sketch_of_atom(theta_k,return_jacobian=False)
+            return _A
+        
+        
+    def update_Atoms(self,Theta=None,update_jacobian=False):
+        """
+        Update the Atoms matrix (a (n_atoms,m)-array containing the A_Phi(P_theta_k) vectors)
+        - with current Theta (self.Theta) if no argument is provided
+        - with the provided Theta argument if one is given (self.Theta will also be updated)
+        """
+        if Theta is not None:
+            self.Theta = Theta # If necessary, update Theta
+        if update_jacobian:
+            self.Atoms, self.Jacobians = self.compute_Atoms_matrix(return_jacobian=True)
+        else:
+            self.Atoms = self.compute_Atoms_matrix(return_jacobian=False)
+   
+    # Add/remove atoms
+    def add_atom(self,new_theta):
+        self.n_atoms += 1
+        self.Theta = np.append(self.Theta,[new_theta],axis=0) #np.r_[self.Theta,new_theta]
+        self.Atoms = np.c_[self.Atoms,self.sketch_of_atom(new_theta)]
+        
+    def remove_atom(self,index_to_remove):
+        self.n_atoms -= 1
+        self.Theta = np.delete(self.Theta,index_to_remove,axis=0)
+        self.Atoms = np.delete(self.Atoms,index_to_remove,axis=1)
+        
+    def replace_atom(self,index_to_replace,new_theta):
+        self.Theta[index_to_replace] = new_theta
+        self.Atoms[:,index_to_replace] = self.sketch_of_atom(new_theta)
+    
+    # Stack/de-stack the found atoms
+    def _stack_sol(self,alpha=None,Theta=None):
+        '''Stacks *all* the atoms and their weights into one vector'''
+        if (Theta is not None) and (alpha is not None):
+            _Theta, _alpha = Theta, alpha
+        else:
+            _Theta, _alpha = self.Theta, self.alpha
+        return np.r_[_Theta.reshape(-1),_alpha]
+
+    def _destack_sol(self,p):
+        assert p.size == self.n_atoms*(self.d_atom + 1)
+        Theta = p[:self.d_atom*self.n_atoms].reshape(self.n_atoms,self.d_atom)
+        alpha = p[-self.n_atoms:]
+        return (alpha,Theta)
+        
+    # Optimization subroutines
+    def _maximize_atom_correlation_fun_grad(self,theta):
+        """Computes the fun. value and grad. of step 1 objective: max_theta <A(P_theta),r> / <A(P_theta),A(P_theta)>"""
+        # Firstly, compute A(P_theta)...
+        sketch_theta, jacobian_theta = self.sketch_of_atom(theta,return_jacobian=True)
+        
+        # ... and its l2 norm
+        norm_sketch_theta = np.linalg.norm(sketch_theta)
+        # Trick to avoid division by zero (doesn't change anything because everything will be zero)
+        if norm_sketch_theta < self.minimum_atom_norm:
+            if self.verbose > 1: print(f'norm_sketch_theta is too small ({norm_sketch_theta}), changed to {self.minimum_atom_norm}.')
+            norm_sketch_theta = self.minimum_atom_norm
+
+        # Evaluate the cost function
+        fun = -np.real(np.vdot(sketch_theta,self.residual))/norm_sketch_theta # - to have a min problem
+
+        # Secondly, get the Jacobian
+        grad = ( -np.real(jacobian_theta@np.conj(self.residual))/(norm_sketch_theta) 
+                 +np.real( np.real(jacobian_theta@np.conj(sketch_theta)) * np.vdot(sketch_theta,self.residual))/(norm_sketch_theta**3) )
+
+        return (fun,grad)
+    
+    def maximize_atom_correlation(self,new_theta):
+        sol = scipy.optimize.minimize(self._maximize_atom_correlation_fun_grad,
+                                      x0=new_theta,
+                                      method='L-BFGS-B', jac=True,
+                                      bounds=self.bounds_atom)
+        return sol.x
+    
+    def find_optimal_weights(self,normalize_atoms=False):
+        """Using the current atoms matrix, find the optimal weights"""
+        # Stack real and imaginary parts if necessary
+        if np.any(np.iscomplex(self.Atoms)): # True if complex sketch output
+            _A = np.r_[self.Atoms.real, self.Atoms.imag]
+            _z = np.r_[self.sketch_reweighted.real, self.sketch_reweighted.imag]
+        else:
+            _A = self.Atoms
+            _z = self.sketch_reweighted
+
+        # Normalize if necessary
+        if normalize_atoms:
+            norms = np.linalg.norm(self.Atoms,axis=0)
+            norm_too_small = np.where(norms < self.minimum_atom_norm)[0]
+            if norm_too_small.size > 0: # Avoid division by zero
+                if self.verbose > 1: print(f'norm of some atoms is too small (min. {norms.min()}), changed to {self.minimum_atom_norm}.')
+                norms[norm_too_small] = self.minimum_atom_norm 
+            _A = _A/norms
+        
+        # Use non-negative least squares to find optimal weights
+        (_alpha,_) = scipy.optimize.nnls(_A,_z)
+        return _alpha
+    
+    def _minimize_cost_from_current_sol(self,p):
+        """
+        Computes the fun. value and grad. of step 5 objective: min_alpha,Theta || z - alpha*A(P_Theta) ||_2,
+        at the point given by p (stacked Theta and alpha), and updates the current sol to match.
+        """
+        # De-stack the parameter vector
+        (_alpha, _Theta) = self._destack_sol(p)
+        
+        # Update the weigths
+        self.alpha = _alpha
+                
+        # Update the atom matrix and compute the Jacobians
+        self.update_Atoms(_Theta,update_jacobian=True)
+
+        # Now that the solution is updated, update the residual
+        self.residual = self.sketch_reweighted - self.sketch_of_solution()
+        
+        # Evaluate the cost function
+        fun  = np.linalg.norm(self.residual)**2
+        
+        # Evaluate the gradients
+        grad = np.empty((self.d_atom+1)*self.n_atoms)
+        for k in range(self.n_atoms): # Gradients of the atoms
+            grad[k*self.d_atom:(k+1)*self.d_atom] = -2*self.alpha[k]*np.real(self.Jacobians[k]@self.residual.conj()) 
+        grad[-self.n_atoms:] = -2*np.real(self.residual@self.Atoms.conj()) # Gradient of the weights
+
+        return (fun,grad)
+        
+    
+    def minimize_cost_from_current_sol(self,ftol=None):
+        if ftol is None: ftol = self.step5_ftol
+        bounds_Theta_alpha = self.bounds_atom * self.n_atoms + [[self.weight_lower_bound,self.weight_upper_bound]] * self.n_atoms
+        sol = scipy.optimize.minimize(self._minimize_cost_from_current_sol,
+                                      x0=self._stack_sol(),  # Start at current solution
+                                      method='L-BFGS-B', jac=True,
+                                      bounds=bounds_Theta_alpha, options={'ftol': ftol})
+        (self.alpha,self.Theta) = self._destack_sol(sol.x)
+    
+    # Instantiation of methods of parent class
+    # ========================================
+    def sketch_of_solution(self,sol=None):
+        """
+        Returns the sketch of the solution, A_Phi(P_theta) = sum_k alpha_k A_Phi(P_theta_k).
+        
+        In: a solution P_theta, either None for the current sol, either a tuple (alpha,Theta) where
+            - alpha is a (n_atoms,)-numpy array containing the weights
+            - Theta is a (n_atoms,)
+        Out: sketch_of_solution: (m,)-array containing the sketch
+        """
+        if sol is None:
+            # Use the current solution
+            (_alpha, _Atoms) = (self.alpha, self.Atoms)
+        else:
+            (_alpha, _Theta) = sol
+            _Atoms = self.compute_Atoms_matrix(_Theta)
+        return _Atoms@_alpha
+        
+    def fit_once(self,random_restart=True,n_iterations=None):
+        """
+        If random_restart is True, constructs a new solution from scratch with CLOMPR, else fine-tune.
+        """
+        
+        if random_restart:
+            ## Main mode of operation
+            
+            # Initializations
+            if n_iterations is None:
+                n_iterations = 2*self.K # By default: CLOMP-*R* (repeat twice)
+            self.initialize_empty_solution()
+            self.residual = self.sketch_reweighted
+                
+            # Main loop
+            for i_iteration in range(n_iterations):
+                ## Step 1: find new atom theta most correlated with residual
+                new_theta = self.randomly_initialize_new_atom()
+                new_theta = self.maximize_atom_correlation(new_theta) 
+                
+                ## Step 2: add it to the support
+                self.add_atom(new_theta)
+                
+                ## Step 3: if necessary, hard-threshold to enforce sparsity
+                if self.n_atoms > self.K:
+                    beta = self.find_optimal_weights(normalize_atoms=True)
+                    index_to_remove = np.argmin(beta)
+                    self.remove_atom(index_to_remove)
+                    # Shortcut: if the last added atom is removed, we can skip to next iter
+                    if index_to_remove == self.K: continue
+                        
+                        
+                ## Step 4: project to find weights
+                self.alpha = self.find_optimal_weights()
+                
+                ## Step 5: fine-tune
+                self.minimize_cost_from_current_sol()
+
+                # Cleanup
+                self.update_Atoms() # The atoms have changed: we must re-compute their sketches matrix
+                self.residual = self.sketch_reweighted - self.sketch_of_solution()
+                
+        # Final fine-tuning with increased optimization accuracy
+        self.minimize_cost_from_current_sol(ftol=0.02*self.step5_ftol)
+        
+        # Normalize weights to unit sum
+        self.alpha /= np.sum(self.alpha)
+        
+        # Package into the solution attribute
+        self.current_sol = (self.alpha, self.Theta)
+
+##########################
+# 1: Compressive K-Means #
+##########################          
+class CLOMP_CKM(CLOMP):
+    """
+    CLOMP solver for Compressive K-Means (CKM), where we fit a mixture of K Diracs to the sketch.
+    The main algorithm is handled by the parent class.
+    """
+    
+    def __init__(self,Phi,K,bounds,sketch=None,sketch_weight = 1.,verbose=0):
+        super(CLOMP_CKM, self).__init__(Phi,K,Phi.d,bounds,sketch,sketch_weight,verbose)
+    
+    def sketch_of_atom(self,theta_k,return_jacobian=False):
+        """
+        Computes and returns A_Phi(P_theta_k) for an atom P_theta_k.
+        possibly with the jacobian, of size (d_atom,m)
+        """
+        assert theta_k.size == self.d_atom
+        
+        sketch_of_atom = self.Phi(theta_k)
+        
+        if return_jacobian:
+            jacobian = self.Phi.grad(theta_k)
+            return sketch_of_atom, jacobian
+        else:
+            return sketch_of_atom
+        
+    def set_bounds_atom(self,bounds):
+        """
+        Should set self.bounds_atom to a list of length d_atom of lower and upper bounds, i.e.,
+            self.bounds_atom = [[lowerbound_1,upperbound_1], ..., [lowerbound_d_atom,upperbound_d_atom]]
+        """
+        assert bounds.shape == (2,self.Phi.d)
+        self.bounds = bounds # data bounds
+        self.bounds_atom = bounds.T.tolist()
+        
+    def randomly_initialize_new_atom(self):
+        new_theta = np.random.uniform(self.bounds[0],self.bounds[1])
+        return new_theta
+    
+    def get_centroids(self):
+        return self.current_sol[1]
+    
+########################
+#  2: Compressive GMM  #
+########################
+
+## 2.1 (diagonal) GMM with CLOMP
+class CLOMP_dGMM(CLOMP):
+    """
+    CLOMP solver for diagonal Gaussian Mixture Modeling (dGMM), where we fit a mixture of K Gaussians
+    with diagonal covariances to the sketch.
+    The main algorithm is handled by the parent class.
+    Requires the feature map to be Fourier features.
+    
+    Init_variance_mode is either "bounds" or "sketch" (default).
+    """
+    
+    def __init__(self,Phi,K,bounds,sketch=None,sketch_weight= 1.,init_variance_mode="sketch",verbose=0):
+        # Check that the feature map is an instance of RFF, otherwise computations are wrong
+        assert isinstance(Phi,SimpleFeatureMap)
+        assert Phi.name.lower() == "complexexponential"
+        
+        self.variance_relative_lowerbound = (1e-4)**2 # Lower bound on the variances, relative to the data domain size
+        self.variance_relative_upperbound =  (0.5)**2 # Upper bound on the variances, relative to the data domain size
+        
+        d_atom = 2*Phi.d # d parameters for the Gaussian centers and d parameters for the diagonal covariance matrix
+        super(CLOMP_dGMM, self).__init__(Phi,K,d_atom,bounds,sketch,sketch_weight,verbose)
+        
+        self.init_variance_mode = init_variance_mode
+        
+    def sketch_of_atom(self,theta_k,return_jacobian=False):
+        """
+        Computes and returns A_Phi(P_theta_k) for an atom P_theta_k.
+        possibly with the jacobian, of size (d_atom,m)
+        """
+        assert theta_k.size == self.d_atom
+        
+        (mu,sig) = (theta_k[:self.Phi.d],theta_k[-self.Phi.d:])
+        sketch_of_atom = fourierSketchOfGaussian(mu,np.diag(sig),self.Phi.Omega,self.Phi.xi,self.Phi.c_norm)
+        
+        if return_jacobian:
+            jacobian = 1j*np.zeros((self.d_atom,self.Phi.m))
+            jacobian[:self.Phi.d] = 1j*self.Phi.Omega * sketch_of_atom # Jacobian w.r.t. mu
+            jacobian[self.Phi.d:] = -0.5*(self.Phi.Omega**2) * sketch_of_atom # Jacobian w.r.t. sigma
+            return sketch_of_atom, jacobian
+        else:
+            return sketch_of_atom
+        
+    def set_bounds_atom(self,bounds):
+        """
+        Should set self.bounds_atom to a list of length d_atom of lower and upper bounds, i.e.,
+            self.bounds_atom = [[lowerbound_1,upperbound_1], ..., [lowerbound_d_atom,upperbound_d_atom]]
+        """
+        assert bounds.shape == (2,self.Phi.d)
+        self.bounds = bounds # data bounds
+        self.bounds_atom = bounds.T.tolist()
+        for i in range(self.Phi.d): # bounds for the variance in each dimension
+            max_variance_this_dimension = (bounds[1][i]-bounds[0][i])**2
+            self.bounds_atom.append([self.variance_relative_lowerbound*max_variance_this_dimension,
+                                     self.variance_relative_upperbound*max_variance_this_dimension]) 
+        
+    def randomly_initialize_new_atom(self):
+        mu0 = np.random.uniform(self.bounds[0],self.bounds[1]) # initial mean
+        
+        # check we can use sketch heuristic (large enough m)
+        MINIMAL_C_VALUE = 6
+        MAXIMAL_C_VALUE = 25
+        MINIMAL_POINTS_PER_BOX = 5
+        if self.init_variance_mode == "sketch":
+            c = max(self.Phi.m//MINIMAL_POINTS_PER_BOX,MAXIMAL_C_VALUE)
+            if c < MINIMAL_C_VALUE:
+                self.init_variance_mode == "bounds"
+        
+        if self.init_variance_mode == "sketch":
+            sigma2_bar = estimate_Sigma_from_sketch(self.sketch,self.Phi,c=c)
+            sig0 = sigma2_bar[0]*np.ones(self.Phi.d)
+        elif self.init_variance_mode == "bounds":
+            sig0 = (10**np.random.uniform(-0.8,-0.1,self.Phi.d) * (self.bounds[1]-self.bounds[0]))**2 # initial covariances
+        else:
+            raise NotImplementedError
+
+        new_theta = np.append(mu0,sig0)
+        return new_theta
+    
+    def get_GMM(self):
+        (weights,_Theta) = self.current_sol
+        (K,d) = self.n_atoms, self.Phi.d
+        mus = np.zeros((K,d))
+        Sigmas = np.zeros((K,d,d))
+        for k in range(K):
+            mus[k] = _Theta[k][:d]
+            Sigmas[k] = np.diag(_Theta[k][d:])
+
+        return (weights,mus,Sigmas)
+
+
+## 2.2 (diagonal) GMM with Hierarchical Splitting
+class CLHS_dGMM(CLOMP_dGMM):
+    """
+    CL Hierarchical Splitting solver for diagonal Gaussian Mixture Modeling (dGMM), where we fit a mixture of K Gaussians
+    with diagonal covariances to the sketch.
+    Due to strong overlap, this algorithm is strongly based on CLOMP for GMM algorithm (its the parent class),
+    but the core fitting method is overridden.
+    Requires the feature map to be Fourier features.
+    """
+    
+    def __init__(self,Phi,K,bounds,sketch=None,sketch_weight = 1.,verbose=0):
+        super(CLHS_dGMM, self).__init__(Phi,K,bounds,sketch,sketch_weight,verbose)
+        
+    # New split methods
+    def split_one_atom(self,k):
+        """Splits the atom at index k in two.
+        The first result of the split is replaced at the k-th index,
+        the second result is added at the end of the atom list."""
+        
+        # Pick the dimension with most variance 
+        theta_k = self.Theta[k]
+        (mu,sig) = (theta_k[:self.Phi.d],theta_k[-self.Phi.d:])
+        i_max_var = np.argmax(sig) 
+        
+        # Direction and stepsize
+        direction_max_var = np.zeros(self.Phi.d)
+        direction_max_var[i_max_var] = 1. # i_max_var-th canonical basis vector in R^d
+        SD_max = np.sqrt(sig[i_max_var]) # max standard deviation 
+        
+        # Split!
+        self.add_atom(       np.append(mu + SD_max*direction_max_var,sig) ) # "Right" split
+        self.replace_atom(k, np.append(mu - SD_max*direction_max_var,sig) ) # "Left" split
+        
+        
+    def split_all_atoms(self):
+        """Self-explanatory"""
+        for k in range(self.n_atoms):
+            self.split_one_atom(k)
+        
+        
+    # Override the main fit_once method 
+    def fit_once(self,random_restart=True):
+        """
+        If random_restart is True, constructs a new solution from scratch with CLHS, else fine-tune.
+        """
+        
+        if random_restart:
+            ## Main mode of operation
+            
+            # Initializations
+            n_iterations = int(np.ceil(np.log2(self.K))) # log_2(K) iterations
+            self.initialize_empty_solution()
+            self.residual = self.sketch_reweighted
+            
+            # Add the starting atom
+            new_theta = self.randomly_initialize_new_atom()
+            new_theta = self.maximize_atom_correlation(new_theta)
+            self.add_atom(new_theta)
+                
+            # Main loop
+            for i_iteration in range(n_iterations):
+                ## Step 1-2: split the currently selected atoms
+                self.split_all_atoms()
+                
+                ## Step 3: if necessary, hard-threshold to enforce sparsity
+                while self.n_atoms > self.K:
+                    beta = self.find_optimal_weights(normalize_atoms=True)
+                    index_to_remove = np.argmin(beta)
+                    self.remove_atom(index_to_remove)
+                        
+                        
+                ## Step 4: project to find weights
+                self.alpha = self.find_optimal_weights()
+                
+                ## Step 5: fine-tune
+                self.minimize_cost_from_current_sol()
+
+                # Cleanup
+                self.update_Atoms() # The atoms have changed: we must re-compute their sketches matrix
+                self.residual = self.sketch_reweighted - self.sketch_of_solution()
+                
+        # Final fine-tuning with increased optimization accuracy
+        self.minimize_cost_from_current_sol(ftol=0.02*self.step5_ftol)
+        
+        # Normalize weights to unit sum
+        self.alpha /= np.sum(self.alpha)
+        
+        # Package into the solution attribute
+        self.current_sol = (self.alpha, self.Theta)
+
+
+##############################################
+##############################################
+##     !!! What follows is deprecated !!!   ##
+##  It's here only for compatibility issues ##
+##############################################
+##############################################
 
 
 ###############
