@@ -615,7 +615,7 @@ def computeSketch(dataset, featureMap, datasetWeights = None, batch_size = None)
             sketch = sketch + featureMap(dataset[b*batch_size:(b+1)*batch_size]).sum(axis=0)
         sketch /= n
     else:
-        sketch = datasetWeights@featureMap(X) 
+        sketch = datasetWeights@featureMap(dataset) 
     return sketch
 
 #################################
